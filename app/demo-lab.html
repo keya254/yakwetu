@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yakwetu — Demo Lab</title>
+<style>
+  :root{--bg:#0e0e14;--panel:#17171f;--gold:#e8b54a;--text:#f5f0e6;--muted:#9a94a8;--green:#3ddc84;--red:#ff5c5c}
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px 100px}
+  h1{color:var(--gold);letter-spacing:2px;font-size:22px;margin-bottom:8px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:28px;max-width:640px;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;max-width:960px}
+  .card{background:var(--panel);border:1px solid #23232e;border-radius:14px;padding:18px}
+  .card h2{font-size:15px;margin-bottom:6px}
+  .card p{color:var(--muted);font-size:12px;margin-bottom:14px;line-height:1.4;min-height:36px}
+  .card button{background:var(--gold);color:#0e0e14;border:none;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;width:100%}
+  .card button:hover{filter:brightness(1.08)}
+  .card button.danger{background:#3a2a2a;color:#ffb4b4}
+  label{font-size:12px;color:var(--muted);display:block;margin:12px 0 4px}
+  input{width:100%;max-width:420px;background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px}
+  #log{margin-top:28px;max-width:960px;background:#101018;border:1px solid #23232e;border-radius:12px;padding:14px;font-family:ui-monospace,monospace;font-size:12px;max-height:280px;overflow:auto;white-space:pre-wrap}
+  a{color:var(--gold)}
+  .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid #23232e;padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .cfg input{width:280px;margin:0;padding:6px 10px;font-size:12px}
+  .cfg button{background:#2c2c3a;color:var(--text);border:none;padding:6px 12px;border-radius:6px;cursor:pointer}
+</style>
+</head>
+<body>
+<h1>YAKWETU · demo lab</h1>
+<p class="sub">
+  Fire dummy events into n8n to test workflows. Set your phone (Twilio WhatsApp sandbox)
+  and n8n base URL below. Also load SQL seed for idle abandonment fixtures:
+  <code>yakwetu-n8n/seed-demo.sql</code>
+</p>
+
+<label>Your phone (WhatsApp / SMS)</label>
+<input id="phone" placeholder="+2547XXXXXXXX" value="+254712345678">
+<label>Your email (upsell)</label>
+<input id="email" placeholder="you@example.com" value="wanjiku@example.com">
+<label>Display name</label>
+<input id="name" value="Wanjiku Mwangi">
+
+<div class="grid" style="margin-top:24px">
+  <div class="card">
+    <h2>A — Browse trail</h2>
+    <p>3 browse events so AI has titles for later nudges.</p>
+    <button onclick="runBrowse()">Send browses</button>
+  </div>
+  <div class="card">
+    <h2>A — Start abandon session</h2>
+    <p>Checkout start, no payment. Wait for YKW-02 idle window, then scanner nudges.</p>
+    <button onclick="runAbandonSetup()">Open checkout (no pay)</button>
+  </div>
+  <div class="card">
+    <h2>B — Payment failed</h2>
+    <p>Insufficient funds → should trigger YKW-03 WhatsApp rescue in seconds.</p>
+    <button class="danger" onclick="runPayFail()">Simulate pay fail</button>
+  </div>
+  <div class="card">
+    <h2>B — Wrong PIN fail</h2>
+    <p>Different failure class for triage copy.</p>
+    <button class="danger" onclick="runPayFail('Wrong M-Pesa PIN entered')">Simulate wrong PIN</button>
+  </div>
+  <div class="card">
+    <h2>B/A — Payment success</h2>
+    <p>Marks session recovered + attributes open nudges.</p>
+    <button onclick="runPaySuccess()">Simulate success</button>
+  </div>
+  <div class="card">
+    <h2>C — Watch complete</h2>
+    <p>Triggers YKW-04 upsell (after wait node). Shorten waits for demos.</p>
+    <button onclick="runWatch()">Finish watching</button>
+  </div>
+</div>
+
+<div id="log">Ready.</div>
+<p style="margin-top:16px;font-size:13px;color:var(--muted)">
+  <a href="index.html">← Storefront</a> ·
+  Workflows must be active; YKW-01 must point Execute Workflow → 03 &amp; 04.
+</p>
+
+<div class="cfg">
+  <span>n8n base:</span>
+  <input id="whBase" placeholder="https://n8n.yakwetu.dontire.com">
+  <button onclick="saveCfg()">Save</button>
+  <span id="cfgStatus"></span>
+</div>
+
+<script src="shared.js"></script>
+<script>
+const logEl = document.getElementById('log');
+function log(msg){ logEl.textContent += '\n' + msg; logEl.scrollTop = logEl.scrollHeight; }
+
+function identity(){
+  USER.phone = document.getElementById('phone').value.trim() || USER.phone;
+  USER.email = document.getElementById('email').value.trim() || USER.email;
+  USER.name = document.getElementById('name').value.trim() || USER.name;
+  localStorage.setItem('ykw_user', JSON.stringify(USER));
+  return USER;
+}
+
+const M = {
+  nights: {id:'nairobi-nights', title:'Nairobi Nights', genre:'Crime Drama', price:150},
+  katana: {id:'katana', title:'Katana', genre:'Coastal Thriller', price:140},
+  kifaru: {id:'kifaru', title:'Kifaru', genre:'Wildlife Doc', price:130},
+  matatu: {id:'matatu-diaries', title:'The Matatu Diaries', genre:'Comedy', price:100},
+};
+
+async function fire(type, movie, extra={}){
+  identity();
+  const base = webhookBase();
+  if (!base) { log('ERROR: set n8n base URL in the bar below'); toast('Set n8n URL', true); return null; }
+  const r = await track(type, movie, extra);
+  log(`${type} → ${JSON.stringify(r)}`);
+  return r;
+}
+
+async function runBrowse(){
+  log('--- browse trail ---');
+  await fire('browse', M.kifaru);
+  await fire('browse', M.matatu);
+  await fire('browse', M.nights);
+  toast('Browse events sent');
+}
+
+async function runAbandonSetup(){
+  log('--- abandon setup ---');
+  await fire('browse', M.nights);
+  await fire('checkout_start', M.nights);
+  log('Stop here. Wait for YKW-02 (45 min or your demo idle). Session: ' + SESSION_ID);
+  toast('Checkout started — do not pay; wait for scanner');
+}
+
+async function runPayFail(reason='Insufficient balance'){
+  log('--- payment_failed: ' + reason + ' ---');
+  await fire('checkout_start', M.nights);
+  await fire('payment_failed', M.nights, { failure_reason: reason });
+  toast('payment_failed sent — check WhatsApp / n8n Executions');
+}
+
+async function runPaySuccess(){
+  log('--- payment_success ---');
+  await fire('checkout_start', M.katana);
+  await fire('payment_success', M.katana);
+  toast('payment_success sent');
+}
+
+async function runWatch(){
+  log('--- watch_complete ---');
+  await fire('payment_success', M.nights);
+  await fire('watch_complete', M.nights);
+  toast('watch_complete sent — check email after wait');
+}
+
+// Prefill n8n URL for production host
+(function(){
+  const el = document.getElementById('whBase');
+  if (!el.value) {
+    const d = webhookBase();
+    if (d) { el.value = d; document.getElementById('cfgStatus').textContent = '✓ connected'; }
+  }
+})();
+</script>
+</body>
+</html>
