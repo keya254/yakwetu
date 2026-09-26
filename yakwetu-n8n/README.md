@@ -34,6 +34,7 @@ Deep links in messages use `STOREFRONT_URL` from `.env` (default `http://localho
 
 - [ ] Postgres credential on all Postgres nodes (`host` = `yakwetu-db` inside Compose)
 - [ ] OpenAI on AI nodes in YKW-02 / 03 / 04
+- [ ] `OPENROUTER_API_KEY` on n8n (AI nodes call OpenRouter — no OpenAI credential)
 - [ ] `AT_API_KEY`, `AT_USERNAME`, `AT_SENDER_ID=AFTKNG` on n8n (SMS primary — no Twilio WhatsApp)
 - [ ] SMTP credential on YKW-04 **Send Email Offer**
 - [ ] YKW-01 → YKW-03 and YKW-01 → YKW-04 workflow links set

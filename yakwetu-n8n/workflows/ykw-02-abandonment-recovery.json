@@ -94,48 +94,48 @@
     },
     {
       "parameters": {
-        "resource": "chat",
-        "operation": "message",
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list"
-        },
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/$/, '') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "role": "system",
-              "content": "You are the retention copywriter for Yakwetu, a Kenyan African-movie streaming platform. Write short, warm, high-converting re-engagement messages. Tone: friendly Nairobi energy, light Sheng allowed but keep it respectful. Max 300 characters. Always include one specific movie hook. Never sound desperate. Return JSON only: {\"message\": \"...\", \"recommended_title\": \"...\"}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
             },
             {
-              "role": "user",
-              "content": "=User {{ $('Loop Over Items').item.json.name || 'this viewer' }} browsed these African movies but didn't buy: {{ $json.browse_history || $('Loop Over Items').item.json.last_movie_title }}. Last title: {{ $('Loop Over Items').item.json.last_movie_title }} ({{ $('Loop Over Items').item.json.last_genre }}, KES {{ $('Loop Over Items').item.json.last_price }}). Write a short SMS nudge that makes them want to finish the purchase tonight."
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'https://yakwetu.dontire.com' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu"
             }
           ]
         },
-        "jsonOutput": true,
-        "options": {
-          "temperature": 0.8
-        }
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.8, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"You are the retention copywriter for Yakwetu, a Kenyan African-movie streaming platform. Write short, warm, high-converting re-engagement messages. Tone: friendly Nairobi energy, light Sheng allowed but keep it respectful. Max 300 characters. Always include one specific movie hook. Never sound desperate. Return JSON only: {\\\"message\\\": \\\"...\\\", \\\"recommended_title\\\": \\\"...\\\"}\" }, { role: 'user', content: ('User ' + ($('Loop Over Items').item.json.name || 'this viewer') + ' browsed these African movies but didn\\'t buy: ' + ($json.browse_history || $('Loop Over Items').item.json.last_movie_title || '') + '. Last title: ' + ($('Loop Over Items').item.json.last_movie_title || '') + ' (' + ($('Loop Over Items').item.json.last_genre || '') + ', KES ' + ($('Loop Over Items').item.json.last_price || '') + '). Write a short SMS nudge that makes them want to finish the purchase tonight.') } ] }) }}",
+        "options": {}
       },
       "id": "d5e1cefc-1764-4a56-ae79-092e22064492",
       "name": "AI: Personalize Nudge",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1.8,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1340,
         200
       ],
-      "credentials": {
-        "openAiApi": {
-          "id": "2",
-          "name": "OpenAI account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const s = $('Loop Over Items').item.json;\nlet ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu 🎬`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n🎬 Finish watching: ${link}` } }];"
+        "jsCode": "const s = $('Loop Over Items').item.json;\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu 🎬`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n🎬 Finish watching: ${link}` } }];"
       },
       "id": "22dd2c9c-8f4c-467f-90de-3432127a14ac",
       "name": "Build Message + Deep Link",

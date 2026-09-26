@@ -51,48 +51,48 @@
     },
     {
       "parameters": {
-        "resource": "chat",
-        "operation": "message",
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list"
-        },
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/$/, '') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "role": "system",
-              "content": "You are Yakwetu, a Kenyan African-movie streaming platform. A viewer just finished a movie. Curate a 2–3 title bundle in the SAME vibe from this catalog: Nairobi Nights (crime drama, KES 150), Sauti ya Mtaa (music drama, KES 120), The Matatu Diaries (comedy, KES 100), Kifaru (wildlife doc, KES 130), Dhahabu (romance, KES 110), Wazi (thriller, KES 140). Offer the bundle at ~20% off. Write an email-style upsell: subject line + 3 short lines + CTA. Return JSON only: {\"subject\": \"...\", \"body\": \"...\", \"bundle_titles\": \"...\", \"bundle_price\": \"...\"}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
             },
             {
-              "role": "user",
-              "content": "=Viewer {{ $('When Called by Intake').item.json.name || 'fan' }} just finished: {{ $('When Called by Intake').item.json.movie_title }} ({{ $('When Called by Intake').item.json.genre }}). Recent history: {{ $json.taste || 'same genre' }}. Make the bundle feel hand-picked, expiring in 48 hours."
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'https://yakwetu.dontire.com' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu"
             }
           ]
         },
-        "jsonOutput": true,
-        "options": {
-          "temperature": 0.8
-        }
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.8, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"You are Yakwetu, a Kenyan African-movie streaming platform. A viewer just finished a movie. Curate a 2-3 title bundle in the SAME vibe from this catalog: Nairobi Nights (crime drama, KES 150), Sauti ya Mtaa (music drama, KES 120), The Matatu Diaries (comedy, KES 100), Kifaru (wildlife doc, KES 130), Dhahabu (romance, KES 110), Wazi (thriller, KES 140). Offer the bundle at ~20% off. Write an email-style upsell: subject line + 3 short lines + CTA. Return JSON only: {\\\"subject\\\": \\\"...\\\", \\\"body\\\": \\\"...\\\", \\\"bundle_titles\\\": \\\"...\\\", \\\"bundle_price\\\": \\\"...\\\"}\" }, { role: 'user', content: ('Viewer ' + ($('When Called by Intake').item.json.name || 'fan') + ' just finished: ' + ($('When Called by Intake').item.json.movie_title || '') + ' (' + ($('When Called by Intake').item.json.genre || '') + '). Recent history: ' + ($json.taste || 'same genre') + '. Make the bundle feel hand-picked, expiring in 48 hours.') } ] }) }}",
+        "options": {}
       },
       "id": "49e05e07-d172-4086-8204-e28e68f76005",
       "name": "AI: Build Bundle Offer",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1.8,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         900,
         300
       ],
-      "credentials": {
-        "openAiApi": {
-          "id": "2",
-          "name": "OpenAI account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "let ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love 🎬', body: 'Hand-picked for you — 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
+        "jsCode": "let ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love 🎬', body: 'Hand-picked for you — 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
       },
       "id": "0e6d694f-cf16-49ca-bdc3-d881b201fdfd",
       "name": "Build Offer",
