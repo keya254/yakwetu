@@ -24,7 +24,7 @@ Set at least:
 - `POSTGRES_PASSWORD` (**change from default** — DB is publishable externally)
 - `POSTGRES_PUBLISH_PORT` (default `15432` — host port for external Postgres clients)
 - `PAYSTACK_PUBLIC_KEY` / `PAYSTACK_SECRET_KEY`
-- `AT_API_KEY` (if using SMS)
+- `AT_API_KEY` / `AT_USERNAME` / `AT_SENDER_ID=AFTKNG` (SMS is the primary channel)
 - Defaults already match the domain: `STOREFRONT_URL`, `WEBHOOK_URL`, `N8N_HOST`
 
 **External Postgres** (TablePlus / `psql` / Metabase):

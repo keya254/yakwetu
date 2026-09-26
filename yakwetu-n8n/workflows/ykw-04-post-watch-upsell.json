@@ -1,5 +1,5 @@
 {
-  "name": "YKW 04 \u2014 Post-Watch Personalized Upsell",
+  "name": "YKW 04 — Post-Watch Personalized Upsell",
   "nodes": [
     {
       "parameters": {},
@@ -62,7 +62,7 @@
           "values": [
             {
               "role": "system",
-              "content": "You are Yakwetu, a Kenyan African-movie streaming platform. A viewer just finished a movie. Curate a 2\u20133 title bundle in the SAME vibe from this catalog: Nairobi Nights (crime drama, KES 150), Sauti ya Mtaa (music drama, KES 120), The Matatu Diaries (comedy, KES 100), Kifaru (wildlife doc, KES 130), Dhahabu (romance, KES 110), Wazi (thriller, KES 140). Offer the bundle at ~20% off. Write an email-style upsell: subject line + 3 short lines + CTA. Return JSON only: {\"subject\": \"...\", \"body\": \"...\", \"bundle_titles\": \"...\", \"bundle_price\": \"...\"}"
+              "content": "You are Yakwetu, a Kenyan African-movie streaming platform. A viewer just finished a movie. Curate a 2–3 title bundle in the SAME vibe from this catalog: Nairobi Nights (crime drama, KES 150), Sauti ya Mtaa (music drama, KES 120), The Matatu Diaries (comedy, KES 100), Kifaru (wildlife doc, KES 130), Dhahabu (romance, KES 110), Wazi (thriller, KES 140). Offer the bundle at ~20% off. Write an email-style upsell: subject line + 3 short lines + CTA. Return JSON only: {\"subject\": \"...\", \"body\": \"...\", \"bundle_titles\": \"...\", \"bundle_price\": \"...\"}"
             },
             {
               "role": "user",
@@ -92,7 +92,7 @@
     },
     {
       "parameters": {
-        "jsCode": "let ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love \ud83c\udfac', body: 'Hand-picked for you \u2014 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
+        "jsCode": "let ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love 🎬', body: 'Hand-picked for you — 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
       },
       "id": "0e6d694f-cf16-49ca-bdc3-d881b201fdfd",
       "name": "Build Offer",
@@ -109,7 +109,7 @@
         "toEmail": "={{ $json.email }}",
         "subject": "={{ $json.subject }}",
         "emailFormat": "html",
-        "html": "=<div style='font-family:Arial;background:#0e0e14;color:#f5f0e6;padding:32px;border-radius:12px'><h2 style='color:#e8b54a'>{{ $json.subject }}</h2><p>{{ $json.body }}</p><p><b>{{ $json.bundle_titles }}</b> \u2014 <span style='color:#e8b54a'>{{ $json.bundle_price }}</span></p><a href='{{ $json.offer_link }}' style='background:#e8b54a;color:#0e0e14;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold'>Grab the bundle</a><p style='opacity:.6;font-size:12px'>Offer expires in 48 hours \u00b7 Yakwetu</p></div>",
+        "html": "=<div style='font-family:Arial;background:#0e0e14;color:#f5f0e6;padding:32px;border-radius:12px'><h2 style='color:#e8b54a'>{{ $json.subject }}</h2><p>{{ $json.body }}</p><p><b>{{ $json.bundle_titles }}</b> — <span style='color:#e8b54a'>{{ $json.bundle_price }}</span></p><a href='{{ $json.offer_link }}' style='background:#e8b54a;color:#0e0e14;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold'>Grab the bundle</a><p style='opacity:.6;font-size:12px'>Offer expires in 48 hours · Yakwetu</p></div>",
         "options": {}
       },
       "id": "572c486d-c2a0-4585-9586-29a2d8854043",
@@ -196,32 +196,63 @@
     },
     {
       "parameters": {
-        "resource": "message",
-        "operation": "send",
-        "from": "whatsapp:+14155238886",
-        "to": "=whatsapp:{{ $('When Called by Intake').item.json.phone }}",
-        "message": "=Last call \ud83c\udfac Your {{ $('Build Offer').item.json.bundle_titles }} bundle ({{ $('Build Offer').item.json.bundle_price }}) expires tonight: {{ $('Build Offer').item.json.offer_link }}",
+        "method": "POST",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $env.AT_USERNAME }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $('When Called by Intake').item.json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "=Last call 🎬 Your {{ $('Build Offer').item.json.bundle_titles }} bundle ({{ $('Build Offer').item.json.bundle_price }}) expires tonight: {{ $('Build Offer').item.json.offer_link }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $env.AT_SENDER_ID }}"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "27f1d62c-efb5-4f77-922d-0d4b24706412",
-      "name": "WhatsApp Reminder",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 2,
+      "name": "SMS Reminder (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         2220,
         220
       ],
-      "credentials": {
-        "twilioApi": {
-          "id": "3",
-          "name": "Twilio account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'post_watch_upsell','email+whatsapp',$3,NOW());",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'post_watch_upsell','email+sms',$3,NOW());",
         "options": {
           "queryReplacement": "={{ [$('When Called by Intake').item.json.user_id, $('When Called by Intake').item.json.session_id, $('Build Offer').item.json.subject] }}"
         }
@@ -335,7 +366,7 @@
       "main": [
         [
           {
-            "node": "WhatsApp Reminder",
+            "node": "SMS Reminder (Africa's Talking)",
             "type": "main",
             "index": 0
           }
@@ -349,7 +380,7 @@
         ]
       ]
     },
-    "WhatsApp Reminder": {
+    "SMS Reminder (Africa's Talking)": {
       "main": [
         [
           {

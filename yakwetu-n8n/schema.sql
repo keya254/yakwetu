@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   name         TEXT,
   phone        TEXT,
   email        TEXT,
-  channel_pref TEXT DEFAULT 'whatsapp',
+  channel_pref TEXT DEFAULT 'sms',
   created_at   TIMESTAMPTZ DEFAULT NOW(),
   last_seen    TIMESTAMPTZ DEFAULT NOW()
 );

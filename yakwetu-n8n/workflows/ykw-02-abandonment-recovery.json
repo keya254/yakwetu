@@ -1,5 +1,5 @@
 {
-  "name": "YKW 02 \u2014 Browse & Cart Abandonment Recovery",
+  "name": "YKW 02 — Browse & Cart Abandonment Recovery",
   "nodes": [
     {
       "parameters": {
@@ -44,7 +44,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Suppress nudges 21:00\u201308:00 East Africa Time \u2014 defer instead of dropping\nconst now = new Date();\nconst eat = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));\nconst h = eat.getHours();\nif (h >= 21 || h < 8) {\n  console.log('Quiet hours in EAT \u2014 skipping run, sessions will be picked up next cycle');\n  return []; // next scheduled run re-selects them automatically\n}\nreturn $input.all();"
+        "jsCode": "// Suppress nudges 21:00–08:00 East Africa Time — defer instead of dropping\nconst now = new Date();\nconst eat = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));\nconst h = eat.getHours();\nif (h >= 21 || h < 8) {\n  console.log('Quiet hours in EAT — skipping run, sessions will be picked up next cycle');\n  return []; // next scheduled run re-selects them automatically\n}\nreturn $input.all();"
       },
       "id": "2c484a2a-9693-4543-aabb-2326f91c5bd0",
       "name": "Quiet Hours Gate (EAT)",
@@ -109,7 +109,7 @@
             },
             {
               "role": "user",
-              "content": "=User {{ $('Loop Over Items').item.json.name || 'this viewer' }} browsed these African movies but didn't buy: {{ $json.browse_history || $('Loop Over Items').item.json.last_movie_title }}. Last title: {{ $('Loop Over Items').item.json.last_movie_title }} ({{ $('Loop Over Items').item.json.last_genre }}, KES {{ $('Loop Over Items').item.json.last_price }}). Write a WhatsApp nudge that makes them want to finish the purchase tonight."
+              "content": "=User {{ $('Loop Over Items').item.json.name || 'this viewer' }} browsed these African movies but didn't buy: {{ $json.browse_history || $('Loop Over Items').item.json.last_movie_title }}. Last title: {{ $('Loop Over Items').item.json.last_movie_title }} ({{ $('Loop Over Items').item.json.last_genre }}, KES {{ $('Loop Over Items').item.json.last_price }}). Write a short SMS nudge that makes them want to finish the purchase tonight."
             }
           ]
         },
@@ -135,7 +135,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const s = $('Loop Over Items').item.json;\nlet ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu \ud83c\udfac`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n\ud83c\udfac Finish watching: ${link}` } }];"
+        "jsCode": "const s = $('Loop Over Items').item.json;\nlet ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu 🎬`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n🎬 Finish watching: ${link}` } }];"
       },
       "id": "22dd2c9c-8f4c-467f-90de-3432127a14ac",
       "name": "Build Message + Deep Link",
@@ -148,62 +148,8 @@
     },
     {
       "parameters": {
-        "resource": "message",
-        "operation": "send",
-        "from": "whatsapp:+14155238886",
-        "to": "=whatsapp:{{ $json.phone }}",
-        "message": "={{ $json.full_message }}",
-        "options": {}
-      },
-      "id": "539df162-a4ab-4f4f-a860-d9034f8901a2",
-      "name": "Send WhatsApp (Twilio)",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 2,
-      "position": [
-        1780,
-        100
-      ],
-      "credentials": {
-        "twilioApi": {
-          "id": "3",
-          "name": "Twilio account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "loose"
-          },
-          "conditions": [
-            {
-              "id": "c1",
-              "leftValue": "={{ $json.error ? 'yes' : 'no' }}",
-              "rightValue": "yes",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        }
-      },
-      "id": "0719ef8f-19af-45c6-82b9-2190ecfd1a32",
-      "name": "WhatsApp Failed?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        2000,
-        100
-      ]
-    },
-    {
-      "parameters": {
         "method": "POST",
-        "url": "https://api.sandbox.africastalking.com/version1/messaging",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -227,7 +173,7 @@
           "parameters": [
             {
               "name": "username",
-              "value": "sandbox"
+              "value": "={{ $env.AT_USERNAME }}"
             },
             {
               "name": "to",
@@ -239,27 +185,28 @@
             },
             {
               "name": "from",
-              "value": "YAKWETU"
+              "value": "={{ $env.AT_SENDER_ID }}"
             }
           ]
         },
         "options": {}
       },
       "id": "523f3bb3-4da7-4fb2-9a5f-1a3bdf00f5c1",
-      "name": "Fallback SMS (Africa's Talking)",
+      "name": "Send SMS (Africa's Talking)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2220,
-        40
-      ]
+        1780,
+        200
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'browse_abandon',$3,$4,NOW());\nUPDATE sessions SET nudge_count = nudge_count + 1, last_nudge_at = NOW() WHERE session_id = $2;",
         "options": {
-          "queryReplacement": "={{ [$('Build Message + Deep Link').item.json.user_id, $('Build Message + Deep Link').item.json.session_id, $('Build Message + Deep Link').item.json.channel_pref || 'whatsapp', $('Build Message + Deep Link').item.json.full_message] }}"
+          "queryReplacement": "={{ [$('Build Message + Deep Link').item.json.user_id, $('Build Message + Deep Link').item.json.session_id, 'sms', $('Build Message + Deep Link').item.json.full_message] }}"
         }
       },
       "id": "51bcaf7c-9b3e-4a8b-b55c-0033f46816f0",
@@ -386,47 +333,7 @@
       "main": [
         [
           {
-            "node": "Send WhatsApp (Twilio)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send WhatsApp (Twilio)": {
-      "main": [
-        [
-          {
-            "node": "WhatsApp Failed?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "WhatsApp Failed?": {
-      "main": [
-        [
-          {
-            "node": "Fallback SMS (Africa's Talking)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Log Nudge",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fallback SMS (Africa's Talking)": {
-      "main": [
-        [
-          {
-            "node": "Log Nudge",
+            "node": "Send SMS (Africa's Talking)",
             "type": "main",
             "index": 0
           }
@@ -449,6 +356,17 @@
         [
           {
             "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Africa's Talking)": {
+      "main": [
+        [
+          {
+            "node": "Log Nudge",
             "type": "main",
             "index": 0
           }

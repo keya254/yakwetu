@@ -41,7 +41,9 @@ services:
       TZ: Africa/Nairobi
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       AT_API_KEY: ${AT_API_KEY:-}
-      AT_USERNAME: ${AT_USERNAME:-sandbox}
+      AT_USERNAME: ${AT_USERNAME:-}
+      AT_SENDER_ID: ${AT_SENDER_ID:-AFTKNG}
+      AT_API_URL: ${AT_API_URL:-https://api.africastalking.com/version1/messaging}
       STOREFRONT_URL: ${STOREFRONT_URL:-http://localhost:8080}
     volumes:
       - yakwetu_n8n_data:/home/node/.n8n

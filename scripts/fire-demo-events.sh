@@ -3,7 +3,7 @@
 #
 # Usage:
 #   export N8N_URL=https://n8n.yakwetu.dontire.com   # or http://localhost:5678
-#   export DEMO_PHONE=+2547XXXXXXXX                  # your WhatsApp sandbox number
+#   export DEMO_PHONE=+254702846542
 #   ./scripts/fire-demo-events.sh [scenario]
 #
 # scenario: all | browse | abandon-setup | payfail | paysuccess | watch | (default: all)
@@ -12,7 +12,7 @@ set -euo pipefail
 
 N8N_URL="${N8N_URL:-https://n8n.yakwetu.dontire.com}"
 WEBHOOK="${N8N_URL%/}/webhook/yakwetu-event"
-PHONE="${DEMO_PHONE:-+254712345678}"
+PHONE="${DEMO_PHONE:-+254702846542}"
 EMAIL="${DEMO_EMAIL:-wanjiku@example.com}"
 SCENARIO="${1:-all}"
 

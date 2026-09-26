@@ -6,7 +6,7 @@ const USER = JSON.parse(localStorage.getItem('ykw_user') || 'null') || (() => {
   const u = {
     user_id: 'u_' + Math.floor(1000 + Math.random() * 9000),
     name: 'Wanjiku Mwangi',
-    phone: '+254712345678',
+    phone: '+254702846542',
     email: 'wanjiku@example.com'
   };
   localStorage.setItem('ykw_user', JSON.stringify(u));

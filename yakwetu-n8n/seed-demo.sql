@@ -22,15 +22,14 @@ DELETE FROM sessions WHERE user_id LIKE 'demo_%';
 DELETE FROM users WHERE user_id LIKE 'demo_%';
 
 -- ---------------------------------------------------------------------------
--- Demo viewers (use YOUR WhatsApp/SMS sandbox numbers in phone if you want
--- real messages — replace +2547XXXXXXXX below before seeding)
+-- Demo viewers — real test phones (rotated; +254702846542 used twice)
 -- ---------------------------------------------------------------------------
 INSERT INTO users (user_id, name, phone, email, channel_pref, created_at, last_seen) VALUES
-  ('demo_wanjiku', 'Wanjiku Mwangi',  '+254712345678', 'wanjiku@example.com',  'whatsapp', NOW() - INTERVAL '7 days', NOW() - INTERVAL '1 hour'),
-  ('demo_otieno',  'Otieno Okoth',    '+254723456789', 'otieno@example.com',   'whatsapp', NOW() - INTERVAL '5 days', NOW() - INTERVAL '2 hours'),
-  ('demo_aisha',   'Aisha Hassan',    '+254734567890', 'aisha@example.com',    'whatsapp', NOW() - INTERVAL '3 days', NOW() - INTERVAL '50 minutes'),
-  ('demo_brian',   'Brian Kamau',     '+254745678901', 'brian@example.com',    'whatsapp', NOW() - INTERVAL '2 days', NOW() - INTERVAL '10 minutes'),
-  ('demo_faith',   'Faith Wambui',    '+254756789012', 'faith@example.com',    'email',    NOW() - INTERVAL '1 day',  NOW() - INTERVAL '30 minutes');
+  ('demo_wanjiku', 'Wanjiku Mwangi',  '+254702846542', 'wanjiku@example.com',  'sms', NOW() - INTERVAL '7 days', NOW() - INTERVAL '1 hour'),
+  ('demo_otieno',  'Otieno Okoth',    '+254757405701', 'otieno@example.com',   'sms', NOW() - INTERVAL '5 days', NOW() - INTERVAL '2 hours'),
+  ('demo_aisha',   'Aisha Hassan',    '+254715322600', 'aisha@example.com',    'sms', NOW() - INTERVAL '3 days', NOW() - INTERVAL '50 minutes'),
+  ('demo_brian',   'Brian Kamau',     '+254741094214', 'brian@example.com',    'sms', NOW() - INTERVAL '2 days', NOW() - INTERVAL '10 minutes'),
+  ('demo_faith',   'Faith Wambui',    '+254702846542', 'faith@example.com',    'sms', NOW() - INTERVAL '1 day',  NOW() - INTERVAL '30 minutes');
 
 -- ---------------------------------------------------------------------------
 -- Scenario A — abandoned browse / checkout (YKW-02 picks these up)
@@ -69,7 +68,7 @@ INSERT INTO dropoffs (user_id, session_id, movie_id, failure_class, ts) VALUES
   ('demo_aisha', 'demo_sess_abandon_3', 'sauti-ya-mtaa', 'insufficient_funds', NOW() - INTERVAL '90 minutes');
 
 INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at, converted) VALUES
-  ('demo_aisha', 'demo_sess_abandon_3', 'payment_failed', 'whatsapp',
+  ('demo_aisha', 'demo_sess_abandon_3', 'payment_failed', 'sms',
    'Pole Aisha — no money left your account. Sauti ya Mtaa is still waiting. Tap to retry.',
    NOW() - INTERVAL '25 hours', false);
 
