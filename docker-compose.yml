@@ -9,6 +9,7 @@
 #   yakwetu-n8n         → https://n8n.yakwetu.dontire.com   (workflows + webhooks)
 #   yakwetu-paystack-api → internal only (reached via storefront /api/*)
 #   yakwetu-db          → Postgres 16 (n8n metadata + app tables)
+#   yakwetu-seed        → oneshot: re-applies seed-demo.sql after DB is healthy
 #
 # Service names are prefixed yakwetu- — dokploy-network is shared across every
 # app on this server. Bare names like "n8n" or "postgres" can collide with
@@ -124,6 +125,7 @@ services:
     volumes:
       - yakwetu_db_data:/var/lib/postgresql/data
       - ./yakwetu-n8n/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./yakwetu-n8n/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -132,6 +134,31 @@ services:
       start_period: 20s
     networks:
       - dokploy-network
+
+  # Re-applies demo users/sessions on every deploy (idempotent — deletes demo_* then inserts).
+  # initdb.d only runs on first empty volume; this oneshot covers redeploys.
+  yakwetu-seed:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:-yakwetu}
+      - POSTGRES_USER=${POSTGRES_USER:-yakwetu}
+      - POSTGRES_DB=${POSTGRES_DB:-yakwetu}
+    volumes:
+      - ./yakwetu-n8n/seed-demo.sql:/seed-demo.sql:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "Yakwetu: applying demo seed…"
+        psql -h yakwetu-db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /seed-demo.sql
+        echo "Yakwetu: demo seed OK"
+    networks:
+      - dokploy-network
+    depends_on:
+      yakwetu-db:
+        condition: service_healthy
+
 volumes:
   yakwetu_db_data:
   yakwetu_n8n_data:

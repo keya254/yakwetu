@@ -14,11 +14,32 @@ services:
     volumes:
       - yakwetu_db_data:/var/lib/postgresql/data
       - ./yakwetu-n8n/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./yakwetu-n8n/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 12
+
+  yakwetu-seed:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-yakwetu}
+      POSTGRES_USER: ${POSTGRES_USER:-yakwetu}
+      POSTGRES_DB: ${POSTGRES_DB:-yakwetu}
+    volumes:
+      - ./yakwetu-n8n/seed-demo.sql:/seed-demo.sql:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "Yakwetu: applying demo seed…"
+        psql -h yakwetu-db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /seed-demo.sql
+        echo "Yakwetu: demo seed OK"
+    depends_on:
+      yakwetu-db:
+        condition: service_healthy
 
   yakwetu-n8n:
     image: n8nio/n8n:latest

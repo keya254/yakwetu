@@ -1,11 +1,11 @@
 -- Yakwetu demo seed data
+-- Applied automatically:
+--   - on first DB volume create (docker-entrypoint-initdb.d/02-seed-demo.sql)
+--   - on every compose/Dokploy deploy via the yakwetu-seed oneshot service
 -- Safe to re-run: deletes previous demo_* rows then inserts fresh fixtures.
 --
--- Load (Dokploy / remote):
+-- Manual (optional):
 --   psql "host=yakwetu.dontire.com port=15432 user=yakwetu dbname=yakwetu" -f yakwetu-n8n/seed-demo.sql
--- Load (local compose.dev):
---   docker compose -f docker-compose.dev.yml exec -T yakwetu-db \
---     psql -U yakwetu -d yakwetu < yakwetu-n8n/seed-demo.sql
 --
 -- What you get:
 --   A) 3 abandoned sessions (idle 50–90 min) → YKW-02 abandonment scanner
@@ -73,8 +73,7 @@ INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at, co
    NOW() - INTERVAL '25 hours', false);
 
 -- ---------------------------------------------------------------------------
--- Scenario B — fresh payment failure (Brian) — fire live rescue via storefront
--- or scripts/fire-demo-events.sh ; this row is the "still abandoned" baseline
+-- Scenario B — fresh payment failure (Brian)
 -- ---------------------------------------------------------------------------
 INSERT INTO sessions (
   session_id, user_id, state, recovered, nudge_count,
@@ -92,7 +91,7 @@ INSERT INTO dropoffs (user_id, session_id, movie_id, failure_class, ts) VALUES
   ('demo_brian', 'demo_sess_payfail', 'baraka', 'wrong_pin', NOW() - INTERVAL '5 minutes');
 
 -- ---------------------------------------------------------------------------
--- Scenario C — purchased + watched (Faith) — upsell taste profile
+-- Scenario C — purchased + watched (Faith)
 -- ---------------------------------------------------------------------------
 INSERT INTO sessions (
   session_id, user_id, state, recovered, nudge_count,
