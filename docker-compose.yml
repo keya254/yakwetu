@@ -89,9 +89,16 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
       - WEBHOOK_URL=${WEBHOOK_URL:-https://n8n.yakwetu.dontire.com/}
+      # Required behind Dokploy/Traefik — stops "Lost connection to the server"
+      - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL:-https://n8n.yakwetu.dontire.com/}
+      - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-1}
+      # SSE is more reliable than websocket through many Traefik setups
+      - N8N_PUSH_BACKEND=${N8N_PUSH_BACKEND:-sse}
       - GENERIC_TIMEZONE=Africa/Nairobi
       - TZ=Africa/Nairobi
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - EXECUTIONS_TIMEOUT=${EXECUTIONS_TIMEOUT:-3600}
+      - EXECUTIONS_TIMEOUT_MAX=${EXECUTIONS_TIMEOUT_MAX:-7200}
       - OPENROUTER_API_KEY
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
@@ -107,6 +114,12 @@ services:
     depends_on:
       yakwetu-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   yakwetu-db:
     image: postgres:16-alpine
