@@ -1,6 +1,6 @@
 /* Yakwetu demo — shared event-tracking helpers.
-   Pages POST events to  {base}/webhook/yakwetu-event  (n8n YKW-01).
-   If no base URL is saved, events are logged locally so the demo still flows. */
+   Events POST to same-origin /webhook/yakwetu-event (nginx → n8n YKW-01).
+   Optional override: paste an n8n base URL in the settings bar. */
 
 const USER = JSON.parse(localStorage.getItem('ykw_user') || 'null') || (() => {
   const u = {
@@ -21,27 +21,34 @@ const SESSION_ID = localStorage.getItem('ykw_session') || (() => {
 
 function webhookBase(){
   const saved = (localStorage.getItem('ykw_base') || '').replace(/\/$/, '');
+  // Prefer same-origin so browser never hits n8n cross-origin (CORS).
+  // Empty string = use current site origin via webhookUrl().
+  if (saved === '' || saved === 'same' || saved === 'local') return '';
   if (saved) return saved;
-  // Production default (Dokploy). Local: paste http://localhost:5678 in the settings bar.
-  if (location.hostname === 'yakwetu.dontire.com' || location.hostname.endsWith('.dontire.com')) {
-    return 'https://n8n.yakwetu.dontire.com';
-  }
-  return '';
+  return ''; // same-origin by default
+}
+
+function webhookUrl(){
+  const base = webhookBase();
+  if (!base) return location.origin.replace(/\/$/, '') + '/webhook/yakwetu-event';
+  return base.replace(/\/$/, '') + '/webhook/yakwetu-event';
 }
 
 function saveCfg(){
   const v = document.getElementById('whBase').value.trim();
-  localStorage.setItem('ykw_base', v);
+  // Blank or "same" → same-origin proxy
+  localStorage.setItem('ykw_base', (v === 'same' || v === location.origin) ? '' : v);
   const st = document.getElementById('cfgStatus');
-  st.textContent = v ? '✓ saved — events go to n8n' : 'offline demo mode';
+  st.textContent = '✓ ' + webhookUrl();
   st.className = 'ok';
 }
 if (document.getElementById('whBase')) {
-  const saved = localStorage.getItem('ykw_base') || '';
-  const fallback = webhookBase();
-  document.getElementById('whBase').value = saved || (fallback || '');
-  document.getElementById('cfgStatus').textContent =
-    (saved || fallback) ? '✓ connected' : 'offline demo mode';
+  const saved = localStorage.getItem('ykw_base');
+  document.getElementById('whBase').value =
+    saved === null || saved === '' ? '' : saved;
+  document.getElementById('whBase').placeholder =
+    'leave blank = same-origin /webhook (recommended)';
+  document.getElementById('cfgStatus').textContent = '→ ' + webhookUrl();
 }
 
 async function track(event_type, movie, extra = {}){
@@ -53,21 +60,24 @@ async function track(event_type, movie, extra = {}){
     genre: movie?.genre || null, price_kes: movie?.price || null,
     ts: new Date().toISOString(), ...extra
   };
-  // local mirror for the demo log
   const log = JSON.parse(localStorage.getItem('ykw_events') || '[]');
   log.push(payload); localStorage.setItem('ykw_events', JSON.stringify(log));
 
-  const base = webhookBase();
-  if (!base) { console.log('[offline]', payload); return { offline: true }; }
+  const url = webhookUrl();
   try {
-    const r = await fetch(base + '/webhook/yakwetu-event', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    return await r.json();
+    const text = await r.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = { raw: text, status: r.status }; }
+    if (!r.ok) return { error: `HTTP ${r.status}`, body };
+    return body;
   } catch (e) {
-    console.warn('webhook unreachable', e);
-    return { error: String(e) };
+    console.warn('webhook unreachable', url, e);
+    return { error: String(e), url };
   }
 }
 

@@ -160,10 +160,10 @@
     {
       "parameters": {
         "amount": 2,
-        "unit": "hours"
+        "unit": "minutes"
       },
       "id": "28504911-1127-4b93-a3d8-31a2ae0ebdc8",
-      "name": "Wait 2 Hours",
+      "name": "Wait 2 Minutes (demo)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
@@ -363,14 +363,14 @@
       "main": [
         [
           {
-            "node": "Wait 2 Hours",
+            "node": "Wait 2 Minutes (demo)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait 2 Hours": {
+    "Wait 2 Minutes (demo)": {
       "main": [
         [
           {

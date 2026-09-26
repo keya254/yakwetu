@@ -14,11 +14,11 @@
     },
     {
       "parameters": {
-        "amount": 1,
-        "unit": "hours"
+        "amount": 2,
+        "unit": "minutes"
       },
       "id": "a9994068-007e-4dec-b69e-0bd0a78066f5",
-      "name": "Wait After Credits",
+      "name": "Wait 2 Minutes After Credits",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
@@ -129,11 +129,11 @@
     },
     {
       "parameters": {
-        "amount": 24,
-        "unit": "hours"
+        "amount": 3,
+        "unit": "minutes"
       },
       "id": "eda76322-c397-4fa5-a57f-faf29c483510",
-      "name": "Wait 24h",
+      "name": "Wait 3 Minutes (demo)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
@@ -278,14 +278,14 @@
       "main": [
         [
           {
-            "node": "Wait After Credits",
+            "node": "Wait 2 Minutes After Credits",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait After Credits": {
+    "Wait 2 Minutes After Credits": {
       "main": [
         [
           {
@@ -333,14 +333,14 @@
       "main": [
         [
           {
-            "node": "Wait 24h",
+            "node": "Wait 3 Minutes (demo)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait 24h": {
+    "Wait 3 Minutes (demo)": {
       "main": [
         [
           {

@@ -7,7 +7,7 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 15
+              "minutesInterval": 5
             }
           ]
         }
@@ -223,42 +223,6 @@
           "name": "Yakwetu Postgres"
         }
       }
-    },
-    {
-      "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "nudges",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "autoMapInputData",
-          "value": {},
-          "matchingColumns": [],
-          "schema": []
-        },
-        "options": {}
-      },
-      "id": "0cb46242-e066-4b14-9cc4-0b0e235356be",
-      "name": "Analytics (Google Sheets)",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.2,
-      "position": [
-        2440,
-        240
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "4",
-          "name": "Google Sheets account"
-        }
-      }
     }
   ],
   "connections": {
@@ -342,24 +306,7 @@
     },
     "Log Nudge": {
       "main": [
-        [
-          {
-            "node": "Analytics (Google Sheets)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Analytics (Google Sheets)": {
-      "main": [
-        [
-          {
-            "node": "Loop Over Items",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "Send SMS (Africa's Talking)": {

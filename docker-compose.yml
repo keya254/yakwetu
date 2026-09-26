@@ -37,6 +37,7 @@ services:
       - dokploy-network
     depends_on:
       - yakwetu-paystack-api
+      - yakwetu-n8n
 
   yakwetu-paystack-api:
     build:

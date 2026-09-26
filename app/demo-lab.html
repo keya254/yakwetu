@@ -34,7 +34,9 @@
   <code>yakwetu-n8n/seed-demo.sql</code>
 </p>
 
-<label>Your phone (SMS)</label>
+<label>n8n (optional override)</label>
+<p class="sub" style="margin-top:0">Leave the bottom bar <b>blank</b> so events go to same-origin <code>/webhook/yakwetu-event</code> (fixes Failed to fetch / CORS). Only paste a URL if you know you need a direct n8n host.</p>
+
 <input id="phone" placeholder="+2547XXXXXXXX" value="+254702846542">
 <label>Your email (upsell)</label>
 <input id="email" placeholder="you@example.com" value="wanjiku@example.com">
@@ -82,7 +84,7 @@
 
 <div class="cfg">
   <span>n8n base:</span>
-  <input id="whBase" placeholder="https://n8n.yakwetu.dontire.com">
+  <input id="whBase" placeholder="leave blank = same-origin /webhook (recommended)">
   <button onclick="saveCfg()">Save</button>
   <span id="cfgStatus"></span>
 </div>
@@ -109,10 +111,8 @@ const M = {
 
 async function fire(type, movie, extra={}){
   identity();
-  const base = webhookBase();
-  if (!base) { log('ERROR: set n8n base URL in the bar below'); toast('Set n8n URL', true); return null; }
   const r = await track(type, movie, extra);
-  log(`${type} → ${JSON.stringify(r)}`);
+  log(`${type} → ${JSON.stringify(r)}  (${webhookUrl()})`);
   return r;
 }
 
@@ -153,13 +153,15 @@ async function runWatch(){
   toast('watch_complete sent — check email after wait');
 }
 
-// Prefill n8n URL for production host
+// Clear any old cross-origin n8n URL that caused Failed to fetch
 (function(){
   const el = document.getElementById('whBase');
-  if (!el.value) {
-    const d = webhookBase();
-    if (d) { el.value = d; document.getElementById('cfgStatus').textContent = '✓ connected'; }
+  const saved = localStorage.getItem('ykw_base') || '';
+  if (saved.includes('n8n.')) {
+    localStorage.setItem('ykw_base', '');
+    el.value = '';
   }
+  document.getElementById('cfgStatus').textContent = '→ ' + webhookUrl();
 })();
 </script>
 </body>
