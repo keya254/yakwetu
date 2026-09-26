@@ -1,0 +1,87 @@
+# Local development — published ports, bridge network, localhost defaults.
+# For Dokploy / production use docker-compose.yml instead.
+
+services:
+  yakwetu-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-yakwetu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yakwetu}
+      POSTGRES_DB: ${POSTGRES_DB:-yakwetu}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - yakwetu_db_data:/var/lib/postgresql/data
+      - ./yakwetu-n8n/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  yakwetu-n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: yakwetu-db
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-yakwetu}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-yakwetu}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-yakwetu}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-yakwetu-dev-encryption-key-change-me}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: Africa/Nairobi
+      TZ: Africa/Nairobi
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      AT_API_KEY: ${AT_API_KEY:-}
+      AT_USERNAME: ${AT_USERNAME:-sandbox}
+      STOREFRONT_URL: ${STOREFRONT_URL:-http://localhost:8080}
+    volumes:
+      - yakwetu_n8n_data:/home/node/.n8n
+    depends_on:
+      yakwetu-db:
+        condition: service_healthy
+
+  yakwetu-storefront:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.storefront
+    image: yakwetu-storefront
+    restart: unless-stopped
+    ports:
+      - "${STOREFRONT_PORT:-8080}:80"
+    # Live-edit HTML without rebuild (prod image still bakes app/ in)
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+      - ./deploy/nginx-storefront.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - yakwetu-paystack-api
+
+  yakwetu-paystack-api:
+    build:
+      context: ./services/paystack-api
+      dockerfile: Dockerfile
+    image: yakwetu-paystack-api
+    restart: unless-stopped
+    ports:
+      - "${PAYSTACK_API_PORT:-3001}:3001"
+    environment:
+      PORT: 3001
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET:-}
+      PAYSTACK_CURRENCY: ${PAYSTACK_CURRENCY:-KES}
+      N8N_EVENT_WEBHOOK: ${N8N_EVENT_WEBHOOK:-http://yakwetu-n8n:5678/webhook/yakwetu-event}
+    depends_on:
+      - yakwetu-n8n
+
+volumes:
+  yakwetu_db_data:
+  yakwetu_n8n_data:

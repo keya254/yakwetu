@@ -1,0 +1,389 @@
+{
+  "name": "YKW 03 \u2014 Payment Failure Rescue",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0ed5762f-80be-4890-b14b-9fb02cd2521e",
+      "name": "When Called by Intake",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Triage the Daraja-style failure reason into a recovery strategy\nconst reason = ($json.failure_reason || '').toLowerCase();\nlet klass = 'generic', strategy = 'retry_steps';\nif (reason.includes('insufficient') || reason.includes('balance')) { klass = 'insufficient_funds'; strategy = 'smaller_bundle'; }\nelse if (reason.includes('pin') || reason.includes('authorisation')) { klass = 'wrong_pin'; strategy = 'pin_help'; }\nelse if (reason.includes('timeout') || reason.includes('cancelled') || reason.includes('canceled')) { klass = 'timeout_or_cancel'; strategy = 'fresh_stk'; }\nelse if (reason.includes('limit')) { klass = 'limit_exceeded'; strategy = 'till_or_card'; }\nreturn [{ json: { ...$json, failure_class: klass, strategy } }];"
+      },
+      "id": "0991cb7e-8ca6-424b-b2ed-ea2d2cb98cdc",
+      "name": "Classify Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are Yakwetu support \u2014 a Kenyan movie streaming platform. A customer's M-Pesa payment just failed. Write a warm, reassuring WhatsApp message (max 350 chars) that (1) says no money was lost / any deduction reverses automatically, (2) gives the exact fix for their failure class, (3) keeps the movie they wanted front and center. Return JSON only: {\"message\": \"...\"}"
+            },
+            {
+              "role": "user",
+              "content": "=Customer {{ $json.name || 'viewer' }}, movie: {{ $json.movie_title }} (KES {{ $json.price_kes }}). Failure class: {{ $json.failure_class }}. Strategy: {{ $json.strategy }}. If strategy=smaller_bundle mention they can grab the 24-hour rental instead. If pin_help remind them to enter M-Pesa PIN on the phone prompt. If fresh_stk say we'll send a fresh prompt. If till_or_card suggest paying via card instead."
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "temperature": 0.6
+        }
+      },
+      "id": "cfa1d331-90ef-4a2a-898d-82fa6e20e19a",
+      "name": "AI: Troubleshooting Copy",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "2",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: 'Pole! Your payment did not go through \u2014 no money was lost. Want us to send a fresh M-Pesa prompt?' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?resume=${$json.session_id}&retry=1`;\nreturn [{ json: { ...$('Classify Failure').first().json, ai_message: ai.message,\n  full_message: `${ai.message}\\n\\n\u25b6\ufe0f Resume payment: ${link}` } }];"
+      },
+      "id": "a2f485a7-fd9a-4b23-8042-a68a6a221fd8",
+      "name": "Build Rescue Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "from": "whatsapp:+14155238886",
+        "to": "=whatsapp:{{ $json.phone }}",
+        "message": "={{ $json.full_message }}",
+        "options": {}
+      },
+      "id": "503c0282-22b6-496e-82cb-b66bb5258295",
+      "name": "Instant WhatsApp",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "3",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'payment_failed','whatsapp',$3,NOW());\nINSERT INTO dropoffs (user_id, session_id, movie_id, failure_class, ts)\nVALUES ($1,$2,$4,$5,NOW());",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id, $json.session_id, $json.full_message, $json.movie_id, $json.failure_class] }}"
+        }
+      },
+      "id": "b56e379c-8ff4-4670-9ed4-dcee955d9d1c",
+      "name": "Log Drop-off",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "hours"
+      },
+      "id": "28504911-1127-4b93-a3d8-31a2ae0ebdc8",
+      "name": "Wait 2 Hours",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT recovered FROM sessions WHERE session_id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$('Classify Failure').first().json.session_id] }}"
+        }
+      },
+      "id": "39bb4712-25a8-4c0e-aabe-da1ef44006b6",
+      "name": "Recovered?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1780,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.recovered }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "4d0fcde2-95d3-4b32-9443-71876debb91e",
+      "name": "If Still Abandoned",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sandbox.africastalking.com/version1/messaging",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "sandbox"
+            },
+            {
+              "name": "to",
+              "value": "={{ $('Classify Failure').first().json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "=Still want {{ $('Classify Failure').first().json.movie_title }}? Use code PONA10 for 10% off \u2014 valid tonight only \ud83c\udfac {{ $env.STOREFRONT_URL }}/checkout.html?resume={{ $('Classify Failure').first().json.session_id }}"
+            },
+            {
+              "name": "from",
+              "value": "YAKWETU"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "260d3947-3011-4d86-a6c8-c84fa1a22958",
+      "name": "SMS: Incentive Nudge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'payment_failed_incentive','sms','PONA10 incentive sent',NOW());\nUPDATE sessions SET nudge_count = nudge_count + 1, last_nudge_at = NOW() WHERE session_id = $2;",
+        "options": {
+          "queryReplacement": "={{ [$('Classify Failure').first().json.user_id, $('Classify Failure').first().json.session_id] }}"
+        }
+      },
+      "id": "62fc63ed-d417-4de5-a4e4-c7cb96d0aab4",
+      "name": "Log Incentive",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2440,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Intake": {
+      "main": [
+        [
+          {
+            "node": "Classify Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Failure": {
+      "main": [
+        [
+          {
+            "node": "AI: Troubleshooting Copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Troubleshooting Copy": {
+      "main": [
+        [
+          {
+            "node": "Build Rescue Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Rescue Message": {
+      "main": [
+        [
+          {
+            "node": "Instant WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instant WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Log Drop-off",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Drop-off": {
+      "main": [
+        [
+          {
+            "node": "Wait 2 Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 Hours": {
+      "main": [
+        [
+          {
+            "node": "Recovered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recovered?": {
+      "main": [
+        [
+          {
+            "node": "If Still Abandoned",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Still Abandoned": {
+      "main": [
+        [
+          {
+            "node": "SMS: Incentive Nudge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "SMS: Incentive Nudge": {
+      "main": [
+        [
+          {
+            "node": "Log Incentive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Now Watching — Yakwetu</title>
+<style>
+  :root{--bg:#0e0e14;--panel:#17171f;--gold:#e8b54a;--text:#f5f0e6;--muted:#9a94a8;--green:#3ddc84}
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);min-height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid #23232e}
+  .logo{font-size:26px;font-weight:800;letter-spacing:4px;color:var(--gold);text-decoration:none}
+  .logo span{color:var(--text);font-weight:300}
+  main{max-width:860px;margin:0 auto;padding:40px 20px 120px}
+  .player{background:#000;border-radius:16px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;border:1px solid #23232e;position:relative;overflow:hidden}
+  .player .emoji{font-size:72px}
+  .bar{position:absolute;bottom:0;left:0;height:5px;background:var(--gold);width:0%;transition:width .5s}
+  .controls{display:flex;gap:12px;margin-top:18px;align-items:center}
+  .controls button{background:var(--gold);color:#0e0e14;border:none;padding:10px 20px;border-radius:10px;font-weight:700;cursor:pointer}
+  .controls .ghost{background:#2c2c3a;color:var(--text)}
+  .hint{color:var(--muted);font-size:13px;margin-top:14px}
+  .done{display:none;margin-top:28px;background:var(--panel);border:1px solid var(--gold);border-radius:14px;padding:24px;text-align:center}
+  .done .big{font-size:44px}
+  .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid #23232e;padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+  .cfg input{background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;width:320px}
+  .cfg button{background:#2c2c3a;color:var(--text);border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+  #toast{position:fixed;top:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:20}
+  .t{background:#1c1c26;border-left:3px solid var(--gold);padding:10px 16px;border-radius:8px;font-size:13px;max-width:320px}
+</style>
+</head>
+<body>
+<header><a class="logo" href="index.html">YAKWETU<span>·stream</span></a></header>
+<main>
+  <h1 id="title" style="margin-bottom:6px">—</h1>
+  <p id="genre" style="color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px">—</p>
+  <div class="player">
+    <div class="emoji">🎬</div>
+    <div id="pct" style="color:var(--muted);font-size:14px">Paused</div>
+    <div class="bar" id="bar"></div>
+  </div>
+  <div class="controls">
+    <button id="playBtn" onclick="togglePlay()">▶ Play</button>
+    <button class="ghost" onclick="finish()">⏭ Simulate: finish watching</button>
+  </div>
+  <p class="hint">In production this is the real player; "finish watching" fires the same <code>watch_complete</code> event the player SDK would send at credits.</p>
+  <div class="done" id="done">
+    <div class="big">🍿</div>
+    <h2>Credits rolled!</h2>
+    <p style="color:var(--muted);margin-top:8px"><code>watch_complete</code> sent — the post-watch upsell workflow is now counting down.<br>Check the email inbox for a hand-picked bundle.</p>
+  </div>
+</main>
+<div class="cfg">
+  <span>⚙️ n8n webhook base:</span>
+  <input id="whBase" placeholder="https://your-n8n.example.com">
+  <button onclick="saveCfg()">Save</button><span id="cfgStatus"></span>
+</div>
+<div id="toast"></div>
+
+<script src="shared.js"></script>
+<script>
+const p = new URLSearchParams(location.search);
+const movie = { id: p.get('m') || 'nairobi-nights', title: p.get('title') || 'Nairobi Nights',
+                genre: p.get('genre') || 'Crime Drama', price: Number(p.get('price') || 150) };
+document.getElementById('title').textContent = movie.title;
+document.getElementById('genre').textContent = movie.genre;
+
+let playing = false, pct = 0, timer = null;
+function togglePlay(){
+  playing = !playing;
+  document.getElementById('playBtn').textContent = playing ? '⏸ Pause' : '▶ Play';
+  if (playing) {
+    timer = setInterval(() => {
+      pct = Math.min(100, pct + 2);
+      document.getElementById('bar').style.width = pct + '%';
+      document.getElementById('pct').textContent = 'Playing · ' + pct + '%';
+      if (pct >= 100) { clearInterval(timer); finish(); }
+    }, 400);
+  } else { clearInterval(timer); document.getElementById('pct').textContent = 'Paused · ' + pct + '%'; }
+}
+async function finish(){
+  clearInterval(timer); playing = false;
+  pct = 100; document.getElementById('bar').style.width = '100%';
+  document.getElementById('pct').textContent = 'Finished';
+  await track('watch_complete', movie);
+  document.getElementById('done').style.display = 'block';
+  toast('🍿 watch_complete sent — upsell sequence started');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,370 @@
+{
+  "name": "YKW 04 \u2014 Post-Watch Personalized Upsell",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e233c6f9-6d76-4fd1-8990-bcba108c694d",
+      "name": "When Called by Intake",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "hours"
+      },
+      "id": "a9994068-007e-4dec-b69e-0bd0a78066f5",
+      "name": "Wait After Credits",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT e.movie_title, e.genre, e.price_kes\nFROM events e\nWHERE e.user_id = $1 AND e.event_type IN ('watch_complete','payment_success')\nORDER BY e.ts DESC LIMIT 6;",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id] }}"
+        }
+      },
+      "id": "982866c2-a418-427c-b5ab-f86177de4a0f",
+      "name": "Get Taste Profile",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are Yakwetu, a Kenyan African-movie streaming platform. A viewer just finished a movie. Curate a 2\u20133 title bundle in the SAME vibe from this catalog: Nairobi Nights (crime drama, KES 150), Sauti ya Mtaa (music drama, KES 120), The Matatu Diaries (comedy, KES 100), Kifaru (wildlife doc, KES 130), Dhahabu (romance, KES 110), Wazi (thriller, KES 140). Offer the bundle at ~20% off. Write an email-style upsell: subject line + 3 short lines + CTA. Return JSON only: {\"subject\": \"...\", \"body\": \"...\", \"bundle_titles\": \"...\", \"bundle_price\": \"...\"}"
+            },
+            {
+              "role": "user",
+              "content": "=Viewer {{ $('When Called by Intake').item.json.name || 'fan' }} just finished: {{ $('When Called by Intake').item.json.movie_title }} ({{ $('When Called by Intake').item.json.genre }}). Recent history: {{ $json.taste || 'same genre' }}. Make the bundle feel hand-picked, expiring in 48 hours."
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "temperature": 0.8
+        }
+      },
+      "id": "49e05e07-d172-4086-8204-e28e68f76005",
+      "name": "AI: Build Bundle Offer",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "2",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love \ud83c\udfac', body: 'Hand-picked for you \u2014 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
+      },
+      "id": "0e6d694f-cf16-49ca-bdc3-d881b201fdfd",
+      "name": "Build Offer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "watch@yakwetu.co.ke",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "=<div style='font-family:Arial;background:#0e0e14;color:#f5f0e6;padding:32px;border-radius:12px'><h2 style='color:#e8b54a'>{{ $json.subject }}</h2><p>{{ $json.body }}</p><p><b>{{ $json.bundle_titles }}</b> \u2014 <span style='color:#e8b54a'>{{ $json.bundle_price }}</span></p><a href='{{ $json.offer_link }}' style='background:#e8b54a;color:#0e0e14;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold'>Grab the bundle</a><p style='opacity:.6;font-size:12px'>Offer expires in 48 hours \u00b7 Yakwetu</p></div>",
+        "options": {}
+      },
+      "id": "572c486d-c2a0-4585-9586-29a2d8854043",
+      "name": "Send Email Offer",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "5",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 24,
+        "unit": "hours"
+      },
+      "id": "eda76322-c397-4fa5-a57f-faf29c483510",
+      "name": "Wait 24h",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS buys FROM events\nWHERE user_id = $1 AND event_type = 'payment_success' AND ts > NOW() - INTERVAL '24 hours';",
+        "options": {
+          "queryReplacement": "={{ [$('When Called by Intake').item.json.user_id] }}"
+        }
+      },
+      "id": "723b764a-66f6-414f-825b-9b0eaabadc9d",
+      "name": "Purchased Bundle?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1780,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.buys }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "270a3fdf-c269-4f80-959d-bb7451e445f5",
+      "name": "If No Purchase",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "from": "whatsapp:+14155238886",
+        "to": "=whatsapp:{{ $('When Called by Intake').item.json.phone }}",
+        "message": "=Last call \ud83c\udfac Your {{ $('Build Offer').item.json.bundle_titles }} bundle ({{ $('Build Offer').item.json.bundle_price }}) expires tonight: {{ $('Build Offer').item.json.offer_link }}",
+        "options": {}
+      },
+      "id": "27f1d62c-efb5-4f77-922d-0d4b24706412",
+      "name": "WhatsApp Reminder",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        220
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "3",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'post_watch_upsell','email+whatsapp',$3,NOW());",
+        "options": {
+          "queryReplacement": "={{ [$('When Called by Intake').item.json.user_id, $('When Called by Intake').item.json.session_id, $('Build Offer').item.json.subject] }}"
+        }
+      },
+      "id": "d73babdb-db2a-42ad-bae7-b719d33caf50",
+      "name": "Log Upsell",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2220,
+        380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Intake": {
+      "main": [
+        [
+          {
+            "node": "Wait After Credits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After Credits": {
+      "main": [
+        [
+          {
+            "node": "Get Taste Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Taste Profile": {
+      "main": [
+        [
+          {
+            "node": "AI: Build Bundle Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Build Bundle Offer": {
+      "main": [
+        [
+          {
+            "node": "Build Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Offer": {
+      "main": [
+        [
+          {
+            "node": "Send Email Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Offer": {
+      "main": [
+        [
+          {
+            "node": "Wait 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 24h": {
+      "main": [
+        [
+          {
+            "node": "Purchased Bundle?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Purchased Bundle?": {
+      "main": [
+        [
+          {
+            "node": "If No Purchase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If No Purchase": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Upsell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Reminder": {
+      "main": [
+        [
+          {
+            "node": "Log Upsell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

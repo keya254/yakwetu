@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Yakwetu — B2C Consumer Conversion &amp; Direct-Purchase Re-Engagement Engine</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: true, theme: 'neutral',
+  themeVariables: { primaryColor:'#f5f5f5', primaryTextColor:'#333', primaryBorderColor:'#999', lineColor:'#666' } });
+</script>
+<style>
+  body { margin:0; padding:0; font-family: Georgia, 'Noto Serif', serif; color:#333;
+         string-set: doctitle ""; text-align: justify; text-align-last: left;
+         font-size: 11pt; line-height: 1.6; }
+  @page { size: A4; margin: 2.5cm 2cm;
+          @top-center { content: string(doctitle); font-size: 9pt; color:#666; }
+          @bottom-center { content: counter(page); font-size: 9pt; color:#666; } }
+  @page :first { margin: 0; @top-center { content: none; } @bottom-center { content: none; } }
+  h1 { string-set: doctitle content(); font-size: 18pt; margin: 1.4em 0 .5em; page-break-after: avoid; }
+  h2 { font-size: 14pt; margin: 1.2em 0 .4em; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin: 1em 0 .3em; page-break-after: avoid; }
+  p { margin: .5em 0; }
+  /* Cover */
+  .cover { width:210mm; height:297mm; margin:0; position:relative; overflow:hidden;
+           page-break-after: always; background:#0e0e14; color:#f5f0e6; }
+  .cover .ring { position:absolute; border:1px solid rgba(232,181,74,.35); border-radius:50%; }
+  .cover .r1 { width:520px; height:520px; top:-160px; right:-160px; }
+  .cover .r2 { width:340px; height:340px; top:-60px; right:-60px; border-color:rgba(232,181,74,.2); }
+  .cover .r3 { width:420px; height:420px; bottom:-180px; left:-140px; border-color:rgba(232,181,74,.18); }
+  .cover .bar { position:absolute; left:0; top:120px; width:90px; height:4px; background:#e8b54a; }
+  .cover-content { position:absolute; top:44%; left:10%; width:80%; }
+  .cover-kicker { font-size:11pt; letter-spacing:6px; color:#e8b54a; text-transform:uppercase; margin-bottom:18px; }
+  .cover-title { font-size:30pt; font-weight:700; line-height:1.25; margin:0 0 14px; }
+  .cover-sub { font-size:13pt; color:#b9b2c4; max-width:75%; margin-bottom:46px; }
+  .cover-meta { font-size:10.5pt; color:#8b8496; line-height:1.9; border-top:1px solid rgba(232,181,74,.35); padding-top:16px; width:70%; }
+  .cover-meta b { color:#e8b54a; font-weight:600; }
+  /* Body components */
+  .def { border-left:3px solid #8a6d2f; padding-left:1em; margin:1em 0; background:#faf7ef; padding-top:.4em; padding-bottom:.4em; }
+  .def .t { font-weight:bold; }
+  table { border-collapse:collapse; width:100%; max-width:100%; margin:.8em 0; font-size:9.5pt; }
+  caption { text-align:left; font-size:9.5pt; color:#555; margin-bottom:.3em; }
+  caption::before { content: attr(data-label) "  "; font-weight:bold; }
+  thead th { border-top:1.5px solid #333; border-bottom:1px solid #333; text-align:left; padding:5px 8px; }
+  tbody td { padding:5px 8px; border-bottom:.5px solid #ccc; vertical-align:top; }
+  tbody tr:last-child td { border-bottom:1.5px solid #333; }
+  tr { page-break-inside: avoid; }
+  pre, table, figure, img, svg, .mermaid, blockquote { max-width:100%; box-sizing:border-box; }
+  pre { background:#f5f5f5; border:1px solid #ddd; padding:10px 12px; font-size:8.5pt;
+        overflow-x:auto; white-space:pre-wrap; word-wrap:break-word; font-family:'Courier New',monospace; }
+  code { font-family:'Courier New',monospace; font-size:9.5pt; word-break:break-word; background:#f5f5f5; padding:0 3px; }
+  .mermaid { text-align:center; margin:1em 0; }
+  figure { text-align:center; margin:1em 0; page-break-inside:avoid; }
+  figcaption { font-size:9.5pt; color:#555; margin-top:.4em; }
+  figcaption::before { content: attr(data-label) "  "; font-weight:bold; }
+  ol, ul { margin:.4em 0 .4em 1.4em; }
+  li { margin:.25em 0; }
+  .note { font-size:9.5pt; color:#555; font-style:italic; }
+  a { color:#333; word-break:break-all; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+  <div class="bar"></div>
+  <div class="cover-content">
+    <div class="cover-kicker">Yakwetu · Nairobi</div>
+    <h1 class="cover-title">B2C Consumer Conversion &amp;<br>Direct-Purchase Re-Engagement Engine</h1>
+    <p class="cover-sub">An automated n8n + AI workflow system that captures high-intent viewers, removes checkout friction, and re-engages abandoners with personalized nudges across WhatsApp, SMS, and email.</p>
+    <div class="cover-meta">
+      <b>Solution design &amp; prototype build</b><br>
+      Scope: browse-abandonment recovery · payment-failure rescue · post-watch upsell<br>
+      Stack: n8n · OpenAI · Postgres · Twilio WhatsApp · Africa's Talking SMS · M-Pesa (simulated)<br>
+      September 2026
+    </div>
+  </div>
+</div>
+
+<h1>1. Executive Summary</h1>
+<p>Yakwetu sells African movies directly — no subscription — so every abandoned checkout is permanently lost revenue, not a delayed renewal. This document specifies a working prototype of a <b>conversion and re-engagement engine</b>: four n8n workflows, a Postgres state layer, AI-personalized messaging, and a dummy storefront that simulates the full consumer journey (browse → checkout → M-Pesa payment → watch → upsell) so the system can be demonstrated end-to-end without touching production.</p>
+<p>The engine covers all three target scenarios:</p>
+<table>
+<caption data-label="Table 1">Scenario coverage</caption>
+<thead><tr><th>Scenario</th><th>Trigger</th><th>Response</th><th>Workflow</th></tr></thead>
+<tbody>
+<tr><td>A — Browse / cart abandonment</td><td>Session idle 45 min+ with no purchase</td><td>AI-personalized WhatsApp nudge with one-click resume link; SMS fallback; max 2 nudges</td><td>YKW-02</td></tr>
+<tr><td>B — Payment failure / checkout drop-off</td><td><code>payment_failed</code> event</td><td>Instant failure-class-specific troubleshooting WhatsApp; 2 h later an incentive SMS if unrecovered; drop-off logged</td><td>YKW-03</td></tr>
+<tr><td>C — Post-watch upsell</td><td><code>watch_complete</code> event</td><td>Genre-matched discounted bundle email after credits; WhatsApp last-call 24 h later if unpurchased</td><td>YKW-04</td></tr>
+</tbody>
+</table>
+<p>Every nudge is logged with its scenario and channel, and every recovered purchase is attributed back to the nudge that caused it — so the demo ends with a measurable recovery-rate number, not just messages on a phone.</p>
+
+<h1>2. Design Principles</h1>
+<div class="def"><span class="t">Single event surface.</span> The storefront (and later, the real app) knows exactly one URL: <code>POST /webhook/yakwetu-event</code>. All routing, state, and scenario logic lives inside n8n — the product team never touches the app to change a nudge.</div>
+<div class="def"><span class="t">State before messaging.</span> No message is ever sent from a trigger directly. Events first update a session-state table; scheduled and follow-up logic reads that state. This makes quiet hours, frequency caps, and recovery checks trivially reliable.</div>
+<div class="def"><span class="t">AI writes, rules decide.</span> The LLM only generates copy and picks recommendations inside strict constraints (length, tone, catalog). Timing, targeting, channel choice, and caps are deterministic rules — auditable and safe.</div>
+<div class="def"><span class="t">Graceful channel cascade.</span> WhatsApp first (highest engagement in Kenya), Africa's Talking SMS on failure, email for rich content. Every send is wrapped so a channel outage degrades the message, never the workflow.</div>
+
+<h1>3. System Architecture</h1>
+<figure>
+<div class="mermaid">
+flowchart LR
+    A[Dummy Storefront<br>browse / checkout / watch] -->|POST yakwetu-event| B[YKW-01<br>Intake and State Router]
+    B --> C[(Postgres<br>users · events · sessions · nudges)]
+    B -->|payment_failed| D[YKW-03<br>Payment Rescue]
+    B -->|watch_complete| E[YKW-04<br>Post-Watch Upsell]
+    F[YKW-02<br>Abandonment Scanner<br>every 15 min] --> C
+    D --> G[OpenAI<br>copy and recommendations]
+    E --> G
+    F --> G
+    F --> H[WhatsApp · SMS · Email]
+    D --> H
+    E --> H
+    H -->|resume deep link| A
+</div>
+<figcaption data-label="Figure 1">End-to-end architecture</figcaption>
+</figure>
+
+<table>
+<caption data-label="Table 2">Component responsibilities</caption>
+<thead><tr><th>Component</th><th>Technology</th><th>Responsibility</th></tr></thead>
+<tbody>
+<tr><td>Storefront simulator</td><td>Static HTML/JS (3 pages)</td><td>Browse grid, M-Pesa-style checkout with success/failure simulation, fake player; emits the production event contract</td></tr>
+<tr><td>Intake &amp; router</td><td>n8n workflow YKW-01</td><td>Validate + normalize events, upsert users, log events, maintain session state, route to scenarios, attribute recoveries</td></tr>
+<tr><td>State layer</td><td>Postgres (<code>schema.sql</code>)</td><td>Users, raw events, per-session state machine, nudge log with conversion attribution, drop-off classifications</td></tr>
+<tr><td>Abandonment scanner</td><td>n8n schedule trigger, YKW-02</td><td>Finds idle unpurchased sessions, enforces quiet hours + caps, triggers personalized nudges</td></tr>
+<tr><td>Copy &amp; recommendations</td><td>OpenAI gpt-4o-mini</td><td>Personalized nudge text, failure-specific troubleshooting, bundle curation — JSON-constrained output</td></tr>
+<tr><td>Channels</td><td>Twilio WhatsApp, Africa's Talking SMS, SMTP email</td><td>Delivery with cascade fallback; sender ID <code>YAKWETU</code></td></tr>
+<tr><td>Analytics</td><td>Postgres queries + Google Sheets</td><td>Funnel, nudge ROI by scenario/channel, top drop-off causes</td></tr>
+</tbody>
+</table>
+
+<h1>4. Event Contract &amp; Data Model</h1>
+<p>All client-side tracking reduces to six event types over one webhook. The dummy pages already emit exactly this shape; the production app would emit the same from its real player and Daraja callbacks.</p>
+<pre>{
+  "event_type": "browse | signup | checkout_start | payment_failed | payment_success | watch_complete",
+  "user_id": "u_1024",  "name": "Wanjiku Mwangi",
+  "phone": "+2547XXXXXXXX",  "email": "viewer@example.com",
+  "session_id": "sess_abc123",
+  "movie_id": "nairobi-nights",  "movie_title": "Nairobi Nights",
+  "genre": "Crime Drama",  "price_kes": 150,
+  "failure_reason": "Insufficient balance"   // payment_failed only
+}</pre>
+<p>The session table is a small state machine: <code>browsing → checkout → failed → purchased</code>, with <code>recovered</code>, <code>nudge_count</code>, and <code>last_nudge_at</code> fields that drive every targeting decision. A purchase inside 72 h of a nudge flips <code>nudges.converted = true</code> — that single join is the entire attribution model.</p>
+
+<h1>5. Scenario A — Browse &amp; Cart Abandonment Recovery (YKW-02)</h1>
+<figure>
+<div class="mermaid">
+flowchart LR
+    A[Schedule<br>every 15 min] --> B[Select abandoned<br>sessions SQL]
+    B --> C{Quiet hours<br>21-08 EAT?}
+    C -->|yes| Z[Defer to next run]
+    C -->|no| D[Fetch browse history]
+    D --> E[OpenAI<br>personalized nudge]
+    E --> F[Build one-click<br>resume link]
+    F --> G[Send WhatsApp]
+    G -->|send fails| H[SMS fallback]
+    G -->|ok| I[Log nudge + analytics]
+    H --> I
+</div>
+<figcaption data-label="Figure 2">Abandonment recovery flow</figcaption>
+</figure>
+<table>
+<caption data-label="Table 3">Targeting rules (all in one SQL query)</caption>
+<thead><tr><th>Rule</th><th>Value</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Idle threshold</td><td>45 minutes</td><td>Long enough to be abandonment, short enough to still remember the title</td></tr>
+<tr><td>Expiry</td><td>72 hours</td><td>Older intent is cold; AI copy stops converting</td></tr>
+<tr><td>Frequency cap</td><td>2 nudges per session, ≥20 h apart</td><td>Protects brand trust; third nudge never pays for itself</td></tr>
+<tr><td>Quiet hours</td><td>21:00–08:00 EAT deferred</td><td>Night nudges read as spam in Kenya; deferral, not dropping, preserves the lead</td></tr>
+<tr><td>Suppression</td><td><code>recovered = false</code> required</td><td>Anyone who bought since is excluded automatically</td></tr>
+</tbody>
+</table>
+<p>The AI step receives the viewer's five most recent browsed titles and returns strict JSON (<code>message</code>, <code>recommended_title</code>) with a 300-character cap and a tone brief ("friendly Nairobi energy, light Sheng allowed, never desperate"). A code node then appends the resume deep link — <code>checkout.html?resume={session_id}</code> — which re-opens checkout with the phone prefilled and the exact movie restored. One tap from WhatsApp to an STK prompt: that is the entire friction budget.</p>
+
+<h1>6. Scenario B — Payment Failure Rescue (YKW-03)</h1>
+<p>Payment failure is the highest-intent moment that exists — the customer already said yes. The workflow classifies the Daraja-style failure reason and tailors the fix:</p>
+<table>
+<caption data-label="Table 4">Failure triage matrix</caption>
+<thead><tr><th>Failure class</th><th>Detection keywords</th><th>Message strategy</th></tr></thead>
+<tbody>
+<tr><td>Insufficient funds</td><td>insufficient, balance</td><td>Reassure no money lost; offer the cheaper 24-hour rental option</td></tr>
+<tr><td>Wrong PIN</td><td>pin, authorisation</td><td>Explain the phone prompt, send a fresh STK push</td></tr>
+<tr><td>Timeout / cancelled</td><td>timeout, cancelled</td><td>One-tap fresh prompt; note network congestion</td></tr>
+<tr><td>Till limit exceeded</td><td>limit</td><td>Offer card payment alternative</td></tr>
+</tbody>
+</table>
+<p>The rescue WhatsApp fires within seconds of the failure — while the customer is still on the checkout screen. A Wait node then parks the execution for 2 hours; on wake it re-reads the session, and only if still unrecovered sends an SMS with a time-boxed incentive code (<code>PONA10</code>, 10% off, tonight only). Every failure is also written to a <code>dropoffs</code> table, so "why do payments fail" becomes a weekly report rather than a guess.</p>
+
+<h1>7. Scenario C — Post-Watch Personalized Upsell (YKW-04)</h1>
+<p>The credits are the emotional peak of the product — the best possible moment to sell the next story. One hour after <code>watch_complete</code>, the workflow pulls the viewer's recent watch history, and the AI curates a 2–3 title bundle in the same genre at roughly 20% off, with a 48-hour expiry. The bundle goes out as a styled HTML email (dark palette, gold accents, single CTA). If no purchase lands within 24 hours, a short WhatsApp "last call" closes the sequence. The second touch is conditional on the first not converting — the engine never argues with a customer who already bought.</p>
+
+<h1>8. Making It Seamless — Creative Details</h1>
+<ol>
+<li><b>Zero-typing recovery.</b> The resume link carries the session; checkout re-opens with movie, price, and M-Pesa number prefilled, and can auto-fire the STK push on load. From nudge to payment prompt: one tap, zero keystrokes.</li>
+<li><b>Smart-send timing.</b> Because every event is timestamped, a later iteration can nudge each user at their personal median-active hour instead of a fixed delay — a one-line SQL change.</li>
+<li><b>Failure empathy, not error codes.</b> The AI is explicitly instructed to lead with "no money was lost / reversals are automatic" — the single biggest anxiety in Kenyan mobile-money payments.</li>
+<li><b>Escalating value, not escalating volume.</b> Touch 1 is a reminder; touch 2 adds an incentive; there is no touch 3. Pressure comes from the offer improving, not from pestering.</li>
+<li><b>Attribution built-in.</b> Recovery is attributed to the exact nudge and channel, so the demo can close with "WhatsApp recovered X% of abandoned checkouts" — the number an investor actually asks for.</li>
+<li><b>Offline-tolerant demo.</b> The storefront queues events locally if n8n is unreachable, so a venue Wi-Fi failure never kills the presentation.</li>
+<li><b>Reply-to-resume (roadmap).</b> Africa's Talking two-way SMS can map "Reply 1" to a fresh STK push — no smartphone or data bundle required, which matters for the mass market.</li>
+</ol>
+
+<h1>9. Setup &amp; Demo Script</h1>
+<h2>9.1 Setup (30–45 minutes)</h2>
+<ol>
+<li>Run <code>schema.sql</code> on any Postgres (the n8n database itself is fine).</li>
+<li>Import all four workflow JSONs into n8n (Workflows → Import from File).</li>
+<li>Create credentials and re-select them on flagged nodes: Postgres, OpenAI, Twilio, SMTP, Google Sheets (optional), and the <code>AT_API_KEY</code> environment variable for Africa's Talking sandbox.</li>
+<li>In YKW-01, point the two Execute Workflow nodes at YKW-03 and YKW-04 (IDs are blank after import).</li>
+<li>Activate YKW-01 and YKW-02. Expose local n8n via <code>ngrok</code> or localtunnel, and paste the base URL into the settings bar on any storefront page.</li>
+</ol>
+<h2>9.2 Five-minute demo</h2>
+<ol>
+<li>Browse 2–3 movies on the storefront — events appear in the <code>events</code> table.</li>
+<li>Buy one, enter a phone, and click <b>Simulate: Insufficient funds</b> — a tailored rescue WhatsApp arrives within seconds.</li>
+<li>Tap the resume link in the message; checkout re-opens prefilled. Click <b>Simulate: Success</b> — the session flips to recovered and the nudge is attributed.</li>
+<li>On the watch page, click <b>Simulate: finish watching</b> — the upsell email with a discounted bundle arrives after the wait.</li>
+<li>For Scenario A on stage, temporarily set the idle threshold to 1 minute and the schedule to every minute.</li>
+<li>Close with the funnel queries at the bottom of <code>schema.sql</code> — state counts, recovery rate by channel, top failure causes.</li>
+</ol>
+
+<h1>10. Path to Production</h1>
+<table>
+<caption data-label="Table 5">Prototype → production swaps</caption>
+<thead><tr><th>Prototype</th><th>Production</th><th>Effort</th></tr></thead>
+<tbody>
+<tr><td>Simulated STK buttons</td><td>M-Pesa Daraja STK Push + callbacks (payload shape already mirrors <code>ResultCode</code>/<code>ResultDesc</code>)</td><td>Low</td></tr>
+<tr><td>Plain <code>resume</code> session link</td><td>Signed single-use token (HMAC of session + expiry)</td><td>Low</td></tr>
+<tr><td>Twilio WhatsApp sandbox</td><td>WhatsApp Business Cloud API with approved templates</td><td>Medium (template approval)</td></tr>
+<tr><td>Wait-node holds</td><td>Queue-based re-checks beyond ~10k concurrent waits</td><td>Medium</td></tr>
+<tr><td>Fixed 45-min idle rule</td><td>Per-user smart-send hour from event timestamps</td><td>Low</td></tr>
+<tr><td>SQL + Sheets analytics</td><td>Metabase/Superset dashboard on the same tables</td><td>Low</td></tr>
+</tbody>
+</table>
+<p class="note">Deliverables accompanying this document: four importable n8n workflow JSONs, <code>schema.sql</code>, a README with credentials checklist, and the three-page dummy storefront (browse, checkout, watch) with built-in event tracking and offline queueing.</p>
+
+</body>
+</html>

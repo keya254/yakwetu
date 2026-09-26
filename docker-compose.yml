@@ -1,0 +1,139 @@
+# Yakwetu — Dokploy deployment
+# Every value comes from Dokploy's Environment tab (bare var names below) or,
+# for local testing of this file, from a .env next to it — nothing sensitive is
+# hardcoded here. See .env.example for the full list. For local development
+# with published ports, use docker-compose.dev.yml instead.
+#
+# Stack:
+#   yakwetu-storefront  → https://yakwetu.dontire.com       (nginx + app/ + /api proxy)
+#   yakwetu-n8n         → https://n8n.yakwetu.dontire.com   (workflows + webhooks)
+#   yakwetu-paystack-api → internal only (reached via storefront /api/*)
+#   yakwetu-db          → Postgres 16 (n8n metadata + app tables)
+#
+# Service names are prefixed yakwetu- — dokploy-network is shared across every
+# app on this server. Bare names like "n8n" or "postgres" can collide with
+# another app's identically-named service.
+#
+# Configure Domains in Dokploy's UI (service name + container port):
+#   yakwetu.dontire.com     → service yakwetu-storefront , port 80
+#   n8n.yakwetu.dontire.com  → service yakwetu-n8n        , port 5678
+# Traefik labels are managed by Dokploy — do not add them here.
+#
+# Paystack webhook URL (Dashboard → Settings → Webhooks):
+#   https://yakwetu.dontire.com/api/paystack/webhook
+#   Events: charge.success, charge.failed
+
+services:
+  yakwetu-storefront:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.storefront
+    image: yakwetu-storefront
+    restart: always
+    expose:
+      - "80"
+    networks:
+      - dokploy-network
+    depends_on:
+      - yakwetu-paystack-api
+
+  yakwetu-paystack-api:
+    build:
+      context: ./services/paystack-api
+      dockerfile: Dockerfile
+    image: yakwetu-paystack-api
+    restart: always
+    expose:
+      - "3001"
+    environment:
+      - PORT=3001
+      - PAYSTACK_PUBLIC_KEY
+      - PAYSTACK_SECRET_KEY
+      - PAYSTACK_WEBHOOK_SECRET
+      - PAYSTACK_CURRENCY=${PAYSTACK_CURRENCY:-KES}
+      # Internal DNS on dokploy-network — do not point this at the public URL
+      - N8N_EVENT_WEBHOOK=${N8N_EVENT_WEBHOOK:-http://yakwetu-n8n:5678/webhook/yakwetu-event}
+    networks:
+      - dokploy-network
+    depends_on:
+      - yakwetu-n8n
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  yakwetu-n8n:
+    image: n8nio/n8n:latest
+    restart: always
+    expose:
+      - "5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=yakwetu-db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-yakwetu}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-yakwetu}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-yakwetu}
+      # MUST be set in Dokploy Environment and kept stable (encrypts credentials)
+      - N8N_ENCRYPTION_KEY
+      - N8N_HOST=${N8N_HOST:-n8n.yakwetu.dontire.com}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
+      - WEBHOOK_URL=${WEBHOOK_URL:-https://n8n.yakwetu.dontire.com/}
+      - GENERIC_TIMEZONE=Africa/Nairobi
+      - TZ=Africa/Nairobi
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - AT_API_KEY
+      - AT_USERNAME=${AT_USERNAME:-sandbox}
+      - STOREFRONT_URL=${STOREFRONT_URL:-https://yakwetu.dontire.com}
+    volumes:
+      - yakwetu_n8n_data:/home/node/.n8n
+    networks:
+      - dokploy-network
+    depends_on:
+      yakwetu-db:
+        condition: service_healthy
+
+  yakwetu-db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-yakwetu}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yakwetu}
+      - POSTGRES_DB=${POSTGRES_DB:-yakwetu}
+    # Optional external access (TablePlus, Metabase, psql from your laptop).
+    # Set POSTGRES_PUBLISH_PORT in Dokploy Environment (pick a free high port,
+    # e.g. 15432 — avoid 5432 on a shared VPS). Connect with:
+    #   host = server IP or yakwetu.dontire.com
+    #   port = POSTGRES_PUBLISH_PORT
+    #   user/password/db = POSTGRES_* below
+    # Leave the var unset only if you rely on the default; remove this block
+    # entirely if you want the DB internal-only on dokploy-network.
+    ports:
+      - "${POSTGRES_PUBLISH_PORT:-15432}:5432"
+    volumes:
+      - yakwetu_db_data:/var/lib/postgresql/data
+      - ./yakwetu-n8n/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    networks:
+      - dokploy-network
+volumes:
+  yakwetu_db_data:
+  yakwetu_n8n_data:
+
+networks:
+  dokploy-network:
+    external: true
