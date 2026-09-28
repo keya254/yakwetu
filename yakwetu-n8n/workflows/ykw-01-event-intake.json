@@ -160,7 +160,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1620,
+        1580,
         200
       ],
       "credentials": {
@@ -180,7 +180,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1720,
+        2160,
         300
       ]
     },
@@ -195,9 +195,102 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1900,
+        2340,
         300
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'https://yakwetu.dontire.com').replace(/\\/$/, '');\nconst title = ev.movie_title || 'your movie';\nconst price = ev.price_kes != null ? `KES ${ev.price_kes}` : '';\nconst watch = `${storefront}/watch.html?m=${encodeURIComponent(ev.movie_id || '')}&title=${encodeURIComponent(title)}&genre=${encodeURIComponent(ev.genre || '')}`;\nconst name = (ev.name || 'there').split(' ')[0];\nconst full_message = `Hi ${name}! Payment received for ${title}${price ? ' (' + price + ')' : ''}. You're all set — watch now: ${watch}`;\nreturn [{ json: { ...ev, watch_link: watch, full_message } }];"
+      },
+      "id": "a11a0010-build-payment-sms",
+      "name": "Build Payment SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $env.AT_USERNAME }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.full_message }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a11a0011-send-payment-sms",
+      "name": "Send Payment SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'payment_success','sms',$3,NOW())\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Build Payment SMS').item.json.user_id, $('Build Payment SMS').item.json.session_id, $('Build Payment SMS').item.json.full_message] }}"
+        }
+      },
+      "id": "a11a0012-log-payment-sms",
+      "name": "Log Payment SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1980,
+        80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -289,7 +382,7 @@
       "main": [
         [
           {
-            "node": "Build OK Response",
+            "node": "Build Payment SMS",
             "type": "main",
             "index": 0
           }
@@ -301,6 +394,39 @@
         [
           {
             "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Payment SMS": {
+      "main": [
+        [
+          {
+            "node": "Send Payment SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Payment SMS": {
+      "main": [
+        [
+          {
+            "node": "Log Payment SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Payment SMS": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
             "type": "main",
             "index": 0
           }

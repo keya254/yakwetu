@@ -135,7 +135,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const s = $('Loop Over Items').item.json;\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu 🎬`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n🎬 Finish watching: ${link}` } }];"
+        "jsCode": "const s = $('Loop Over Items').item.json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu 🎬`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n🎬 Finish watching: ${link}` } }];"
       },
       "id": "22dd2c9c-8f4c-467f-90de-3432127a14ac",
       "name": "Build Message + Deep Link",
@@ -150,16 +150,13 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apiKey",
               "value": "={{ $env.AT_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/x-www-form-urlencoded"
             },
             {
               "name": "Accept",
@@ -186,6 +183,10 @@
             {
               "name": "from",
               "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
             }
           ]
         },

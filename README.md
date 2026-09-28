@@ -25,7 +25,7 @@ Set at least:
 - `POSTGRES_PUBLISH_PORT` (default `15432` — host port for external Postgres clients)
 - `PAYSTACK_PUBLIC_KEY` / `PAYSTACK_SECRET_KEY`
 - `OPENROUTER_API_KEY` (AI copy via OpenRouter; optional `OPENROUTER_MODEL`)
-- `AT_API_KEY` / `AT_USERNAME` / `AT_SENDER_ID=AFTKNG` (SMS is the primary channel)
+- `AT_USERNAME` / `AT_API_KEY` / `AT_SENDER_ID=AFTKNG` (SMS: header `apiKey`, form `username` + `from`)
 - Defaults already match the domain: `STOREFRONT_URL`, `WEBHOOK_URL`, `N8N_HOST`
 
 **External Postgres** (TablePlus / `psql` / Metabase):

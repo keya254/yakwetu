@@ -92,7 +92,7 @@
     },
     {
       "parameters": {
-        "jsCode": "let ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love 🎬', body: 'Hand-picked for you — 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
+        "jsCode": "const atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love 🎬', body: 'Hand-picked for you — 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
       },
       "id": "0e6d694f-cf16-49ca-bdc3-d881b201fdfd",
       "name": "Build Offer",
@@ -198,16 +198,13 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apiKey",
               "value": "={{ $env.AT_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/x-www-form-urlencoded"
             },
             {
               "name": "Accept",
@@ -234,6 +231,10 @@
             {
               "name": "from",
               "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
             }
           ]
         },
