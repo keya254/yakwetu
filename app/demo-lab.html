@@ -53,7 +53,7 @@
 <div class="grid" style="margin-top:24px">
   <div class="card featured">
     <h2>A — Simulate abandon → SMS</h2>
-    <p>No waiting. Creates a checkout session already idle 50 min, then scans → SMS to finish payment.</p>
+    <p>No waiting. Checkout (no pay) → YKW-02 backdates 50 min idle → SMS to finish payment.</p>
     <button onclick="runSimulateAbandon()">Simulate abandon → SMS</button>
   </div>
   <div class="card">
@@ -123,12 +123,12 @@ async function fire(type, movie, extra={}){
   return r;
 }
 
-async function triggerAbandonScan(){
+async function triggerAbandonScan(sessionId){
   const url = location.origin.replace(/\/$/, '') + '/api/demo/abandon-scan';
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ force: true, source: 'demo-lab' })
+    body: JSON.stringify({ force: true, source: 'demo-lab', session_id: sessionId })
   });
   const text = await r.text();
   let body;
@@ -139,18 +139,18 @@ async function triggerAbandonScan(){
 }
 
 async function runSimulateAbandon(){
-  log('--- simulate abandon → SMS (no wait: backdate idle 50 min) ---');
+  log('--- simulate abandon → SMS (no wait: backdate idle 50 min on scan) ---');
   const sess = newSession();
   log('Fresh session: ' + sess);
+  // Only needs YKW-01 for browse/checkout; YKW-02 ages session then sends SMS
   await fire('browse', M.nights);
   await fire('checkout_start', M.nights);
-  await fire('demo_abandon', M.nights); // YKW-01 sets last_activity = now - 50 min
   try {
-    await triggerAbandonScan();
+    await triggerAbandonScan(sess);
     toast('Already-abandoned session scanned — check phone + YKW-02');
-    log('DB pretends idle 50 min → YKW-02 should SMS resume/finish payment');
+    log('YKW-02 backdated session 50 min + scanned → expect resume/finish-payment SMS');
   } catch (e) {
-    log('Scan failed: ' + e.message + ' (is YKW-02 Active with Demo/Manual Scan webhook?)');
+    log('Scan failed: ' + e.message + ' (re-import/Publish YKW-02 with Demo/Manual Scan + Age Demo Session; set Postgres on Age Demo Session)');
     toast(String(e.message || e), true);
   }
 }

@@ -40,6 +40,56 @@
     },
     {
       "parameters": {
+        "jsCode": "const b = $json.body || $json;\nconst session_id = b.session_id || null;\nconst force = b.force !== false;\nreturn [{ json: { session_id, force, source: b.source || 'webhook' } }];"
+      },
+      "id": "a11a-ykw02-prepare-demo",
+      "name": "Prepare Demo Scan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE sessions\nSET last_activity = NOW() - INTERVAL '50 minutes',\n    recovered = false,\n    state = CASE WHEN state IN ('purchased','browsing') THEN 'checkout' ELSE state END,\n    nudge_count = 0,\n    last_nudge_at = NULL\nWHERE $1::text IS NOT NULL AND length($1::text) > 0 AND session_id = $1;\nSELECT $1::text AS session_id, 'aged_or_skipped' AS status;",
+        "options": {
+          "queryReplacement": "={{ [$json.session_id] }}"
+        }
+      },
+      "id": "a11a-ykw02-age-demo",
+      "name": "Age Demo Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Always continue to Find Abandoned (age may return 0 rows)\nlet session_id = null;\ntry { session_id = $('Prepare Demo Scan').first().json.session_id; } catch (e) {}\nreturn [{ json: { ok: true, session_id } }];"
+      },
+      "id": "a11a-ykw02-continue-after-age",
+      "name": "Continue After Age",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        520
+      ]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
         "query": "SELECT s.session_id, s.user_id, s.state, s.last_movie_id, s.last_movie_title,\n       s.last_genre, s.last_price, s.nudge_count, u.name, u.phone, u.email, u.channel_pref\nFROM sessions s JOIN users u ON u.user_id = s.user_id\nWHERE s.state IN ('browsing','checkout','failed')\n  AND s.recovered = false\n  AND s.last_activity < NOW() - INTERVAL '45 minutes'\n  AND s.last_activity > NOW() - INTERVAL '72 hours'\n  AND s.nudge_count < 2\n  AND (s.last_nudge_at IS NULL OR s.last_nudge_at < NOW() - INTERVAL '20 hours')\nLIMIT 25;",
         "options": {}
@@ -345,6 +395,39 @@
       ]
     },
     "Demo / Manual Scan": {
+      "main": [
+        [
+          {
+            "node": "Prepare Demo Scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Demo Scan": {
+      "main": [
+        [
+          {
+            "node": "Age Demo Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Age Demo Session": {
+      "main": [
+        [
+          {
+            "node": "Continue After Age",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After Age": {
       "main": [
         [
           {

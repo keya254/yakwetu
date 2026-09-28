@@ -1,5 +1,5 @@
 {
-  "name": "YKW 01 — Event Intake & State Router",
+  "name": "YKW 01 \u2014 Event Intake & State Router",
   "nodes": [
     {
       "parameters": {
@@ -71,7 +71,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO events (user_id, session_id, event_type, movie_id, movie_title, genre, price_kes, failure_reason, ts)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz);\nINSERT INTO sessions (session_id, user_id, state, last_activity, last_movie_id, last_movie_title, last_genre, last_price)\nVALUES ($2,$1,\n  CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE 'browsing' END,\n  NOW(), $4,$5,$6,$7)\nON CONFLICT (session_id) DO UPDATE SET\n  state = CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE sessions.state END,\n  last_activity = NOW(),\n  last_movie_id = COALESCE($4, sessions.last_movie_id),\n  last_movie_title = COALESCE($5, sessions.last_movie_title),\n  last_genre = COALESCE($6, sessions.last_genre),\n  last_price = COALESCE($7, sessions.last_price),\n  recovered = CASE WHEN $3='payment_success' THEN true WHEN $3='demo_abandon' THEN false ELSE sessions.recovered END\nRETURNING session_id;",
+        "query": "INSERT INTO events (user_id, session_id, event_type, movie_id, movie_title, genre, price_kes, failure_reason, ts)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz);\nINSERT INTO sessions (session_id, user_id, state, last_activity, last_movie_id, last_movie_title, last_genre, last_price, recovered, nudge_count, last_nudge_at)\nVALUES ($2,$1,\n  CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE 'browsing' END,\n  CASE WHEN $3 = 'demo_abandon' THEN NOW() - INTERVAL '50 minutes' ELSE NOW() END,\n  $4,$5,$6,$7,\n  CASE WHEN $3 = 'payment_success' THEN true WHEN $3 = 'demo_abandon' THEN false ELSE false END,\n  CASE WHEN $3 = 'demo_abandon' THEN 0 ELSE 0 END,\n  NULL)\nON CONFLICT (session_id) DO UPDATE SET\n  state = CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE sessions.state END,\n  last_activity = CASE WHEN $3 = 'demo_abandon' THEN NOW() - INTERVAL '50 minutes' ELSE NOW() END,\n  last_movie_id = COALESCE($4, sessions.last_movie_id),\n  last_movie_title = COALESCE($5, sessions.last_movie_title),\n  last_genre = COALESCE($6, sessions.last_genre),\n  last_price = COALESCE($7, sessions.last_price),\n  recovered = CASE WHEN $3='payment_success' THEN true WHEN $3='demo_abandon' THEN false ELSE sessions.recovered END,\n  nudge_count = CASE WHEN $3='demo_abandon' THEN 0 ELSE sessions.nudge_count END,\n  last_nudge_at = CASE WHEN $3='demo_abandon' THEN NULL ELSE sessions.last_nudge_at END\nRETURNING session_id;",
         "options": {
           "queryReplacement": "={{ [$json.user_id, $json.session_id, $json.event_type, $json.movie_id, $json.movie_title, $json.genre, $json.price_kes, $json.failure_reason, $json.ts] }}"
         }
@@ -172,31 +172,7 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE sessions\nSET last_activity = NOW() - INTERVAL '50 minutes',\n    recovered = false,\n    state = 'checkout',\n    nudge_count = 0,\n    last_nudge_at = NULL\nWHERE session_id = $1\nRETURNING session_id, user_id, state, last_activity, last_movie_title;",
-        "options": {
-          "queryReplacement": "={{ [$json.session_id] }}"
-        }
-      },
-      "id": "a11a0020-age-session-demo",
-      "name": "Age Session (demo idle)",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        1580,
-        420
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "1",
-          "name": "Yakwetu Postgres"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: {\n  status: 'ok',\n  event: 'demo_abandon',\n  session_id: ev.session_id,\n  user_id: ev.user_id,\n  hint: 'No wait — last_activity backdated 50 min (already abandoned). Demo Lab triggers YKW-02 next.'\n}}];"
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: {\n  status: 'ok',\n  event: 'demo_abandon',\n  session_id: ev.session_id,\n  user_id: ev.user_id,\n  hint: 'Session stored as already idle 50 min (no wait)'\n}}];"
       },
       "id": "a11a0021-build-demo-abandon-ok",
       "name": "Build Demo Abandon OK",
@@ -261,7 +237,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ev = $('Normalize & Validate').first().json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'https://yakwetu.dontire.com').replace(/\\/$/, '');\nconst title = ev.movie_title || 'your movie';\nconst price = ev.price_kes != null ? `KES ${ev.price_kes}` : '';\nconst watch = `${storefront}/watch.html?m=${encodeURIComponent(ev.movie_id || '')}&title=${encodeURIComponent(title)}&genre=${encodeURIComponent(ev.genre || '')}`;\nconst name = (ev.name || 'there').split(' ')[0];\nconst full_message = `Hi ${name}! Payment received for ${title}${price ? ' (' + price + ')' : ''}. You're all set — watch now: ${watch}`;\nreturn [{ json: { ...ev, watch_link: watch, full_message } }];"
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'https://yakwetu.dontire.com').replace(/\\/$/, '');\nconst title = ev.movie_title || 'your movie';\nconst price = ev.price_kes != null ? `KES ${ev.price_kes}` : '';\nconst watch = `${storefront}/watch.html?m=${encodeURIComponent(ev.movie_id || '')}&title=${encodeURIComponent(title)}&genre=${encodeURIComponent(ev.genre || '')}`;\nconst name = (ev.name || 'there').split(' ')[0];\nconst full_message = `Hi ${name}! Payment received for ${title}${price ? ' (' + price + ')' : ''}. You're all set \u2014 watch now: ${watch}`;\nreturn [{ json: { ...ev, watch_link: watch, full_message } }];"
       },
       "id": "a11a0010-build-payment-sms",
       "name": "Build Payment SMS",
@@ -431,7 +407,7 @@
         ],
         [
           {
-            "node": "Age Session (demo idle)",
+            "node": "Build Demo Abandon OK",
             "type": "main",
             "index": 0
           }
@@ -439,17 +415,6 @@
         [
           {
             "node": "Build OK Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Age Session (demo idle)": {
-      "main": [
-        [
-          {
-            "node": "Build Demo Abandon OK",
             "type": "main",
             "index": 0
           }
