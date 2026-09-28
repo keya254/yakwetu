@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import MovieRow from '../components/MovieRow';
+import MovieSection from '../components/MovieRow';
 import { useCatalog } from '../context/CatalogContext';
 import { useLibrary } from '../context/LibraryContext';
 import { similarMovies } from '../data/catalog';
@@ -8,142 +8,191 @@ import { track } from '../lib/track';
 
 export default function MoviePage() {
   const { id } = useParams();
-  const { getById, movies } = useCatalog();
+  const { getById, movies, ready } = useCatalog();
   const { isOwned } = useLibrary();
   const navigate = useNavigate();
   const movie = getById(id);
-  const [posterOk, setPosterOk] = useState(Boolean(movie?.poster));
+  const [posterOk, setPosterOk] = useState(true);
+  const [bgOk, setBgOk] = useState(true);
 
   useEffect(() => {
-    setPosterOk(Boolean(movie?.poster));
-  }, [movie?.id, movie?.poster]);
+    setPosterOk(true);
+    setBgOk(true);
+  }, [movie?.id, movie?.poster, movie?.backdrop]);
 
   useEffect(() => {
     if (movie) track('browse', movie);
   }, [movie?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (!ready && !movie) {
+    return (
+      <div className="film-page">
+        <div className="film-loading">Loading movie…</div>
+      </div>
+    );
+  }
+
   if (!movie) {
     return (
-      <div className="page">
-        <p className="empty">Movie not found.</p>
-        <Link to="/">← Home</Link>
+      <div className="film-page">
+        <div className="film-loading">
+          <p>Movie not found.</p>
+          <Link to="/" className="btn btn-buy" style={{ marginTop: 12 }}>
+            ← Back home
+          </Link>
+        </div>
       </div>
     );
   }
 
   const owned = isOwned(movie.id);
-  const similar = similarMovies(movie, 12, movies).map((m) => getById(m.id) || m);
+  const similar = similarMovies(movie, 12, movies);
+  const backdrop = movie.backdrop || movie.poster || '';
+  const genres = String(movie.genre || '')
+    .split(/[•,/|]/)
+    .map((g) => g.trim())
+    .filter(Boolean);
+
+  const goWatchOrBuy = () => {
+    track('browse', movie);
+    if (owned) {
+      navigate(`/watch/${movie.id}`);
+      return;
+    }
+    track('checkout_start', movie);
+    navigate(`/checkout/${movie.id}`);
+  };
 
   return (
-    <>
-      <div className="movie-detail">
-        <div className="detail-hero" style={{ ['--hero-bg']: movie.bg }}>
-          <h1
-            style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 'clamp(36px, 8vw, 64px)',
-              letterSpacing: 1,
-              marginBottom: 8,
-            }}
-          >
-            {movie.title}
-          </h1>
-          <div className="meta" style={{ color: 'var(--gold)', marginBottom: 12 }}>
-            {movie.genre}
-          </div>
-          <div className="cta" style={{ marginBottom: 12 }}>
-            {owned ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => navigate(`/watch/${movie.id}`)}
-              >
-                ▶ Play
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-buy"
-                onClick={() => {
-                  track('checkout_start', movie);
-                  navigate(`/checkout/${movie.id}`);
-                }}
-              >
-                Buy to watch · KES {movie.price}
-              </button>
-            )}
-            <Link className="btn btn-ghost" to="/">
-              Back
-            </Link>
-          </div>
-          <div className="meta" style={{ color: 'var(--muted)', marginBottom: 10 }}>
-            <span>
-              <b style={{ color: 'var(--text)' }}>{movie.year}</b>
-            </span>
-            <span>{movie.runtime}</span>
-            <span>★ {movie.rating}</span>
-            <span>KES {movie.price}</span>
-          </div>
-          <p className="muted">{movie.blurb}</p>
-        </div>
+    <div className="film-page">
+      <nav className="film-crumbs">
+        <Link to="/">Home</Link>
+        <span>/</span>
+        <Link to="/#movies">Movies</Link>
+        <span>/</span>
+        <span>{movie.title}</span>
+      </nav>
 
-        <div className="stack">
-          <div className="detail-poster">
+      {/* Player / backdrop stage */}
+      <div className="film-stage" style={{ ['--hero-bg']: movie.bg || '#1a1528' }}>
+        {backdrop && bgOk ? (
+          <img
+            className="film-stage-bg"
+            src={backdrop}
+            alt=""
+            onError={() => setBgOk(false)}
+          />
+        ) : (
+          <div className="film-stage-fallback" style={{ background: movie.bg }} />
+        )}
+        <div className="film-stage-shade" />
+        <button type="button" className="film-play" onClick={goWatchOrBuy}>
+          <span className="film-play-icon">▶</span>
+          <span>{owned ? 'Play now' : 'Buy · KES 5'}</span>
+        </button>
+      </div>
+
+      {/* Info block: poster | details | actions */}
+      <div className="film-info">
+        <div className="film-poster-col">
+          <div className="film-poster">
             {movie.poster && posterOk ? (
               <img src={movie.poster} alt="" onError={() => setPosterOk(false)} />
             ) : (
-              <div className="fb" style={{ background: movie.bg }}>
+              <div className="film-poster-fb" style={{ background: movie.bg }}>
                 {movie.title}
               </div>
             )}
           </div>
-          <div className="side-stats">
+          <button type="button" className="btn btn-ghost film-trailer" onClick={goWatchOrBuy}>
+            {owned ? '▶ Watch' : 'Buy to unlock'}
+          </button>
+        </div>
+
+        <div className="film-main">
+          <h1>{movie.title}</h1>
+          <p className="film-blurb">{movie.blurb || 'No synopsis available.'}</p>
+          <dl className="film-meta">
             <div>
-              <span>Director</span>
-              <b>{movie.director || '—'}</b>
+              <dt>Genre</dt>
+              <dd>
+                {genres.length
+                  ? genres.map((g) => (
+                      <span key={g} className="film-tag">
+                        {g}
+                      </span>
+                    ))
+                  : '—'}
+              </dd>
             </div>
             <div>
-              <span>Runtime</span>
-              <b>{movie.runtime || '—'}</b>
+              <dt>Actors</dt>
+              <dd>{(movie.cast || []).join(', ') || '—'}</dd>
             </div>
             <div>
-              <span>Release</span>
-              <b>{movie.year || '—'}</b>
+              <dt>Director</dt>
+              <dd>{movie.director || '—'}</dd>
             </div>
             <div>
-              <span>Price</span>
-              <b>KES {movie.price}</b>
+              <dt>Country</dt>
+              <dd>Kenya</dd>
             </div>
             <div>
-              <span>Status</span>
-              <b>{owned ? 'Unlocked' : 'Locked'}</b>
+              <dt>Duration</dt>
+              <dd>{movie.runtime || '—'}</dd>
             </div>
+            <div>
+              <dt>Quality</dt>
+              <dd>
+                <span className="film-hd">HD</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Release</dt>
+              <dd>{movie.year || '—'}</dd>
+            </div>
+            <div>
+              <dt>Rating</dt>
+              <dd>★ {movie.rating || '—'}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="film-actions">
+          <button type="button" className="btn btn-buy film-action-btn" onClick={goWatchOrBuy}>
+            {owned ? '▶ Stream · Unlocked' : 'Buy · KES 5'}
+          </button>
+          <Link to="/" className="btn btn-ghost film-action-btn">
+            ← Browse more
+          </Link>
+          <div className="film-status">
+            Status: <b>{owned ? 'Unlocked' : 'Locked'}</b>
           </div>
         </div>
       </div>
 
-      <section className="row">
-        <div className="row-head">
-          <h3>Cast</h3>
-        </div>
-        <div className="cast-row" style={{ padding: '0 var(--pad)' }}>
-          {(movie.cast || ['Cast TBA']).map((name, i) => (
-            <div className="cast-p" key={name + i}>
-              <div className="cast-av" style={{ background: movie.bg }}>
-                {(name || '?').charAt(0).toUpperCase()}
+      {(movie.cast || []).length ? (
+        <section className="film-cast">
+          <h2>Cast</h2>
+          <div className="cast-row">
+            {movie.cast.map((name, i) => (
+              <div className="cast-p" key={name + i}>
+                <div className="cast-av" style={{ background: movie.bg }}>
+                  {(name || '?').charAt(0).toUpperCase()}
+                </div>
+                <div className="cast-name">{name}</div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  {i === 0 ? 'Lead' : 'Cast'}
+                </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>{name}</div>
-              <div className="muted" style={{ fontSize: 11 }}>
-                {i === 0 ? 'Lead' : 'Cast'}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-      <div className="catalog" style={{ paddingTop: 0 }}>
-        <MovieRow title="You might also like" items={similar} />
+      <div className="film-related">
+        <MovieSection title="Related movies" items={similar} />
       </div>
-    </>
+    </div>
   );
 }

@@ -10,6 +10,7 @@ function withCachedPosters(list) {
   return list.map((m) => ({
     ...m,
     poster: m.poster || cached[m.id] || '',
+    backdrop: m.backdrop || m.poster || cached[m.id] || '',
   }));
 }
 
@@ -17,7 +18,6 @@ function loadCachedKenya() {
   try {
     const raw = JSON.parse(localStorage.getItem(KENYA_CACHE_KEY) || 'null');
     if (raw && Array.isArray(raw.movies) && raw.movies.length && raw.at) {
-      // reuse for 12 hours
       if (Date.now() - raw.at < 12 * 60 * 60 * 1000) return raw.movies;
     }
   } catch {}
@@ -25,12 +25,10 @@ function loadCachedKenya() {
 }
 
 export function CatalogProvider({ children }) {
-  const [movies, setMovies] = useState(() =>
-    withCachedPosters(loadCachedKenya() || BASE)
-  );
-  const [source, setSource] = useState(() =>
-    loadCachedKenya() ? 'tmdb-cache' : 'static'
-  );
+  const cached = loadCachedKenya();
+  const [movies, setMovies] = useState(() => withCachedPosters(cached || BASE));
+  const [source, setSource] = useState(() => (cached ? 'tmdb-cache' : 'static'));
+  const [ready, setReady] = useState(() => Boolean(cached || BASE.length));
 
   const getById = useCallback(
     (id) => movies.find((m) => m.id === id) || null,
@@ -41,10 +39,14 @@ export function CatalogProvider({ children }) {
 
   const applyPosters = useCallback((map) => {
     if (!map || !Object.keys(map).length) return;
-    const cached = { ...loadPosterCache(), ...map };
-    savePosterCache(cached);
+    const cachedMap = { ...loadPosterCache(), ...map };
+    savePosterCache(cachedMap);
     setMovies((prev) =>
-      prev.map((m) => (map[m.id] ? { ...m, poster: map[m.id] } : m))
+      prev.map((m) =>
+        map[m.id]
+          ? { ...m, poster: map[m.id], backdrop: m.backdrop || map[m.id] }
+          : m
+      )
     );
   }, []);
 
@@ -57,26 +59,28 @@ export function CatalogProvider({ children }) {
         const r = await fetch('/api/catalog/kenya?limit=12', {
           signal: ctrl.signal,
         });
-        if (!r.ok) return;
-        const data = await r.json();
-        if (data.ok && Array.isArray(data.movies) && data.movies.length) {
-          const list = withCachedPosters(data.movies);
-          setMovies(list);
-          setSource('tmdb');
-          localStorage.setItem(
-            KENYA_CACHE_KEY,
-            JSON.stringify({ at: Date.now(), movies: data.movies })
-          );
-          return;
+        if (r.ok) {
+          const data = await r.json();
+          if (data.ok && Array.isArray(data.movies) && data.movies.length) {
+            const list = withCachedPosters(data.movies);
+            setMovies(list);
+            setSource('tmdb');
+            localStorage.setItem(
+              KENYA_CACHE_KEY,
+              JSON.stringify({ at: Date.now(), movies: data.movies })
+            );
+            setReady(true);
+            return;
+          }
         }
       } catch {
         /* keep fallback */
       } finally {
         clearTimeout(timer);
+        setReady(true);
       }
 
-      // No TMDB list — enrich static Kenyan posters
-      const need = movies.filter((m) => !m.poster).slice(0, 12);
+      const need = (cached || BASE).filter((m) => !m.poster).slice(0, 12);
       if (!need.length) return;
       try {
         const r = await fetch('/api/catalog/enrich', {
@@ -108,8 +112,8 @@ export function CatalogProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ movies, getById, search, applyPosters, source }),
-    [movies, getById, search, applyPosters, source]
+    () => ({ movies, getById, search, applyPosters, source, ready }),
+    [movies, getById, search, applyPosters, source, ready]
   );
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;

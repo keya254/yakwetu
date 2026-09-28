@@ -950,6 +950,10 @@ async function fetchKenyanMovies(limit = 12) {
       tmdb: r.id,
       imdb: '',
       poster,
+      backdrop:
+        d.backdrop_path || r.backdrop_path
+          ? `https://image.tmdb.org/t/p/w1280${d.backdrop_path || r.backdrop_path}`
+          : poster,
       origin: 'KE',
     });
   }
