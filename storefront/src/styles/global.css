@@ -1,5 +1,5 @@
 :root {
-  --bg: #050508;
+  --bg: #000;
   --panel: #12121a;
   --line: #242430;
   --gold: #e8b54a;
@@ -7,10 +7,8 @@
   --muted: #9b95a6;
   --danger: #ff5c5c;
   --green: #3ddc84;
-  --pad: clamp(12px, 4vw, 48px);
-  --header-h: 56px;
-  --tile-w: clamp(110px, 28vw, 148px);
-  --tile-h: clamp(160px, 40vw, 220px);
+  --pad: clamp(10px, 3vw, 28px);
+  --header-h: 52px;
 }
 
 *,
@@ -184,109 +182,96 @@ img {
 
 .hero {
   position: relative;
-  min-height: clamp(320px, 52vh, 560px);
+  height: clamp(240px, 42vw, 380px);
   display: flex;
   align-items: flex-end;
-  padding: 24px var(--pad) 28px;
+  padding: 16px var(--pad) 28px;
   overflow: hidden;
+  background: #000;
 }
 
-.hero-bg {
+.hero-media {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(90deg, #050508 8%, transparent 58%),
-    linear-gradient(0deg, #050508 4%, transparent 52%),
-    radial-gradient(
-      ellipse 70% 55% at 72% 38%,
-      color-mix(in srgb, var(--hero-bg, #1a1528) 65%, transparent),
-      transparent 70%
-    ),
-    var(--hero-bg, #1a1528);
 }
 
-.hero-poster {
-  display: none;
-  position: absolute;
-  right: var(--pad);
-  top: 14%;
-  bottom: 14%;
-  width: min(240px, 28vw);
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid #ffffff14;
-  box-shadow: 0 24px 60px #000a;
-  background: #111;
-}
-
-.hero-poster img {
+.hero-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
 }
 
-.hero-poster .fb {
+.hero-fallback {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  text-align: center;
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 22px;
-  letter-spacing: 1px;
+}
+
+.hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, #000 0%, #000c 28%, transparent 62%),
+    linear-gradient(0deg, #000 0%, transparent 55%);
 }
 
 .hero-copy {
   position: relative;
   z-index: 2;
-  max-width: 560px;
-  width: 100%;
+  max-width: min(520px, 92%);
 }
 
 .hero h1 {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(36px, 8vw, 68px);
+  font-size: clamp(32px, 7vw, 56px);
   line-height: 0.92;
   letter-spacing: 1px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
 }
 
 .hero .meta {
-  color: var(--muted);
+  color: #cfc9bc;
   font-size: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .hero .meta .star {
   color: var(--gold);
 }
 
+.hero .meta .price-tag {
+  color: var(--gold);
+  font-weight: 700;
+}
+
 .hero p {
   color: #d8d2c6;
-  font-size: clamp(13px, 2.4vw, 15px);
-  line-height: 1.45;
-  margin-bottom: 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 12px;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  max-width: 42ch;
 }
 
 .cta {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .btn {
   border: none;
-  border-radius: 6px;
-  padding: 11px 16px;
+  border-radius: 999px;
+  padding: 10px 18px;
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
@@ -312,33 +297,64 @@ img {
 .btn-ghost {
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
+  border-radius: 8px;
+}
+.btn-round {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 700;
+  font-style: italic;
 }
 .btn-danger {
   background: #2a1818;
   color: var(--danger);
   border: 1px solid #4a2020;
+  border-radius: 8px;
 }
 
-@media (min-width: 900px) {
-  .hero-poster {
-    display: block;
-  }
+.hero-dots {
+  position: absolute;
+  right: var(--pad);
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+}
+
+.hero-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background: #ffffff55;
+  cursor: pointer;
+  padding: 0;
+}
+
+.hero-dots .dot.on {
+  background: #fff;
+  width: 18px;
+  border-radius: 99px;
 }
 
 .profile-bar {
-  margin: 4px var(--pad) 0;
-  padding: 10px 12px;
-  border-radius: 10px;
+  margin: 8px var(--pad) 0;
+  padding: 8px 10px;
+  border-radius: 8px;
   background: var(--panel);
   border: 1px solid var(--line);
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
 }
 
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: #2a2438;
   border: 2px solid var(--gold);
@@ -347,85 +363,95 @@ img {
   justify-content: center;
   font-weight: 700;
   flex-shrink: 0;
+  font-size: 14px;
 }
 
 .profile-bar .who {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
 }
 .profile-bar .sub {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.rows {
-  padding: 8px 0 24px;
-}
-
-.row {
-  margin: 14px 0;
-}
-
-.row-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 0 var(--pad) 6px;
-}
-
-.row-head h3 {
-  font-size: clamp(15px, 3.2vw, 17px);
-  font-weight: 700;
-}
-
-.row-head span {
   color: var(--muted);
   font-size: 11px;
 }
 
-.scroller {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 2px var(--pad) 6px;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+.catalog {
+  padding: 10px var(--pad) 28px;
 }
 
-.scroller::-webkit-scrollbar {
-  height: 4px;
+.section {
+  margin: 16px 0 0;
 }
-.scroller::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 99px;
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.section-head h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.section-head span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.movie-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 6px;
+}
+
+@media (min-width: 520px) {
+  .movie-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 8px;
+  }
+}
+
+@media (min-width: 768px) {
+  .movie-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px 10px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .movie-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
 }
 
 .tile {
-  flex: 0 0 var(--tile-w);
-  scroll-snap-align: start;
+  width: 100%;
   cursor: pointer;
   background: none;
   border: none;
   color: inherit;
   text-align: left;
   padding: 0;
+  min-width: 0;
 }
 
 .tile:hover .art,
 .tile:focus-visible .art {
-  transform: translateY(-3px) scale(1.02);
+  transform: translateY(-2px);
+  outline: 1px solid #ffffff33;
 }
 
 .art {
-  height: var(--tile-h);
-  border-radius: 8px;
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
-  border: 1px solid #ffffff0d;
   background: #14141c;
   transition: transform 0.15s ease;
 }
@@ -442,17 +468,17 @@ img {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.75));
+  background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.7));
   pointer-events: none;
 }
 
 .title-fallback {
   position: relative;
   z-index: 1;
-  padding: 10px;
+  padding: 8px;
   text-align: center;
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(13px, 3vw, 16px);
+  font-size: clamp(12px, 2.8vw, 15px);
   letter-spacing: 1px;
   line-height: 1.15;
   color: #fff;
@@ -460,7 +486,7 @@ img {
 }
 
 .tile .info {
-  padding: 6px 1px 0;
+  padding: 5px 1px 0;
 }
 .tile h4 {
   font-size: 12px;
@@ -475,32 +501,38 @@ img {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tile .price {
-  color: var(--gold);
-  font-size: 11px;
+
+.owned-badge,
+.price-badge {
+  position: absolute;
+  z-index: 2;
+  font-size: 9px;
+  padding: 2px 5px;
+  border-radius: 4px;
   font-weight: 700;
-  margin-top: 2px;
 }
 
 .owned-badge {
-  position: absolute;
   top: 6px;
   left: 6px;
-  z-index: 2;
   background: #000a;
   color: var(--gold);
-  font-size: 9px;
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-weight: 700;
+}
+
+.price-badge {
+  top: 6px;
+  right: 6px;
+  background: var(--gold);
+  color: #120e08;
 }
 
 .filters {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 2px var(--pad) 4px;
+  padding: 4px 0 8px;
   -webkit-overflow-scrolling: touch;
+  margin-bottom: 4px;
 }
 
 .chip {

@@ -141,7 +141,7 @@ export default function MoviePage() {
         </div>
       </section>
 
-      <div className="rows">
+      <div className="catalog" style={{ paddingTop: 0 }}>
         <MovieRow title="You might also like" items={similar} />
       </div>
     </>

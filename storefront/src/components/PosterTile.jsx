@@ -15,6 +15,7 @@ export default function PosterTile({ movie }) {
     >
       <div className="art" style={{ background: movie.bg }}>
         {owned ? <span className="owned-badge">OWNED</span> : null}
+        <span className="price-badge">KES 5</span>
         {movie.poster ? (
           <img
             src={movie.poster}
@@ -35,9 +36,8 @@ export default function PosterTile({ movie }) {
       <div className="info">
         <h4>{movie.title}</h4>
         <div className="g">
-          {movie.year || ''} · {movie.genre}
+          {movie.year || ''} · ★ {movie.rating || '—'}
         </div>
-        <div className="price">KES {movie.price}</div>
       </div>
     </button>
   );

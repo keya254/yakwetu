@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Hero from '../components/Hero';
-import MovieRow from '../components/MovieRow';
+import MovieSection from '../components/MovieRow';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import { useLibrary } from '../context/LibraryContext';
@@ -50,43 +50,51 @@ export default function HomePage({ query, setQuery }) {
   const { search, movies } = useCatalog();
   const { user, isLoggedIn } = useAuth();
   const { ownedMovies, recommendations, watched, library } = useLibrary();
-  const [featured, setFeatured] = useState(null);
+  const [slide, setSlide] = useState(0);
 
   const list = useMemo(() => search(query), [search, query]);
 
-  useEffect(() => {
-    if (!featured || query) {
-      setFeatured(list[0] || movies[0] || null);
-    }
-  }, [list, movies, query]); // eslint-disable-line react-hooks/exhaustive-deps
+  const heroSlides = useMemo(() => {
+    const base = query.trim() ? list : movies;
+    return base
+      .slice()
+      .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+      .slice(0, 5);
+  }, [movies, list, query]);
 
   useEffect(() => {
-    if (query.trim()) return undefined;
+    setSlide(0);
+  }, [query, heroSlides.map((m) => m.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (query.trim() || heroSlides.length < 2) return undefined;
     const t = setInterval(() => {
-      const i = Math.floor(Math.random() * movies.length);
-      setFeatured(movies[i]);
-    }, 12000);
+      setSlide((i) => (i + 1) % heroSlides.length);
+    }, 7000);
     return () => clearInterval(t);
-  }, [movies, query]);
+  }, [heroSlides, query]);
 
   const trending = useMemo(
     () =>
       list
         .slice()
-        .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
-        .slice(0, 14),
+        .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0)),
     [list]
   );
-  const cheap = useMemo(() => list.filter((m) => m.price <= 10).slice(0, 14), [list]);
   const loved = useMemo(
-    () => list.filter((m) => Number(m.rating || 0) >= 7).slice(0, 14),
+    () => list.filter((m) => Number(m.rating || 0) >= 7),
     [list]
   );
   const buckets = useMemo(() => genreBuckets(list), [list]);
 
   return (
     <>
-      <Hero movie={featured} />
+      <Hero
+        slides={heroSlides}
+        activeIndex={Math.min(slide, Math.max(heroSlides.length - 1, 0))}
+        onSelect={setSlide}
+      />
+
       <section className="profile-bar">
         <div className="avatar">
           {(isLoggedIn ? user.name : 'Y').charAt(0).toUpperCase()}
@@ -95,50 +103,42 @@ export default function HomePage({ query, setQuery }) {
           <div className="who">{isLoggedIn ? user.name : 'Guest'}</div>
           <div className="sub">
             {isLoggedIn
-              ? `${user.phone} · ${Object.keys(library).length} unlocked · ${watched.length} finished`
-              : 'Sign in to unlock purchases & SMS recommendations'}
+              ? `${user.phone} · ${Object.keys(library).length} unlocked · ${watched.length} finished · all titles KES 5`
+              : 'All titles KES 5 · sign in to buy & get SMS recs'}
           </div>
         </div>
       </section>
 
-      <div className="rows">
+      <div className="catalog">
         {!list.length ? (
           <p className="empty">No titles match your search.</p>
         ) : (
           <>
-            <MovieRow
+            <div className="filters">
+              {CHIPS.map((c) => (
+                <button
+                  key={c.label}
+                  type="button"
+                  className={`chip${query.toLowerCase() === c.q ? ' on' : ''}`}
+                  onClick={() => setQuery(c.q)}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+
+            <MovieSection
               id="because"
               title={recommendations.headline}
               items={recommendations.items}
             />
             {ownedMovies.length ? (
-              <MovieRow id="mylist" title="My List" items={ownedMovies} />
+              <MovieSection id="mylist" title="My List" items={ownedMovies} />
             ) : null}
-
-            <section className="row">
-              <div className="row-head">
-                <h3>Browse</h3>
-                <span>filters</span>
-              </div>
-              <div className="filters">
-                {CHIPS.map((c) => (
-                  <button
-                    key={c.label}
-                    type="button"
-                    className={`chip${query.toLowerCase() === c.q ? ' on' : ''}`}
-                    onClick={() => setQuery(c.q)}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <MovieRow id="movies" title="Trending on Yakwetu" items={trending} />
-            <MovieRow title="From KES 5" items={cheap} />
-            <MovieRow title="Critically loved" items={loved} />
+            <MovieSection id="movies" title="Trending on Yakwetu" items={trending} />
+            <MovieSection title="Critically loved" items={loved} />
             {buckets.map((b) => (
-              <MovieRow key={b.title} title={b.title} items={b.items} />
+              <MovieSection key={b.title} title={b.title} items={b.items} />
             ))}
           </>
         )}
