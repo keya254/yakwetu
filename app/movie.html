@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movie — Yakwetu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#08080c;--panel:rgba(18,18,26,.82);--line:#2a2a36;--gold:#e8b54a;--text:#f4f0e8;--muted:#9b95a6}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh}
+  a{color:inherit;text-decoration:none}
+  header{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:18px;padding:14px 4vw;background:linear-gradient(#08080cee,#08080c00)}
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:2px;color:var(--gold)}
+  nav{margin-left:auto;display:flex;gap:14px}
+  nav a{color:var(--muted);font-size:13px}
+  .hero{position:relative;min-height:78vh;padding:100px 4vw 40px;display:grid;grid-template-columns:1.2fr .8fr;gap:28px;align-items:end}
+  @media(max-width:900px){.hero{grid-template-columns:1fr;min-height:auto}}
+  .hero-bg{position:absolute;inset:0;background:var(--bg-color,#1a1528);opacity:.95}
+  .hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#08080c 10%,transparent 60%),linear-gradient(0deg,#08080c,#0000 50%)}
+  .hero-poster{position:relative;z-index:2;width:min(280px,70vw);aspect-ratio:2/3;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#111;justify-self:end;box-shadow:0 30px 80px #000a}
+  .hero-poster img{width:100%;height:100%;object-fit:cover}
+  .hero-poster .fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:72px}
+  .copy{position:relative;z-index:2;max-width:640px}
+  .copy h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(40px,8vw,72px);letter-spacing:1px;line-height:.95;margin-bottom:8px}
+  .genres{color:var(--gold);font-size:14px;margin-bottom:14px}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .actions button,.actions a.btn{border:none;border-radius:8px;padding:12px 22px;font-weight:700;cursor:pointer;font-size:14px}
+  .play{background:#fff;color:#111}
+  .buy{background:var(--gold);color:#111}
+  .ghost{background:#ffffff18;color:#fff}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;color:var(--muted);font-size:13px;margin-bottom:12px}
+  .meta b{color:var(--text)}
+  .blurb{color:#d9d3c7;line-height:1.55;max-width:540px;font-size:15px}
+  .side{position:relative;z-index:2;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;backdrop-filter:blur(8px)}
+  .side div{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #ffffff10;font-size:13px}
+  .side span{color:var(--muted)}
+  .section{padding:28px 4vw}
+  .section h2{font-size:20px;margin-bottom:14px}
+  .cast{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px}
+  .cast .p{flex:0 0 110px;text-align:center}
+  .cast .av{width:88px;height:88px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;background:#1c1c26;border:2px solid var(--line);font-size:28px}
+  .cast .n{font-size:12px;font-weight:600}
+  .cast .r{font-size:11px;color:var(--muted)}
+  .scroller{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px}
+  .tile{flex:0 0 150px;cursor:pointer}
+  .art{height:220px;border-radius:10px;display:flex;align-items:flex-end;justify-content:center;padding:12px;font-size:48px;position:relative;overflow:hidden}
+  .art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .art span{position:relative;z-index:1}
+  .tile h4{font-size:13px;margin-top:8px}
+  .tile .g{font-size:11px;color:var(--muted)}
+  #toast{position:fixed;top:70px;right:16px;z-index:40}
+  .t{background:#16161f;border-left:3px solid var(--gold);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="index.html">YAKWETU</a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="index.html#because">My list</a>
+    <a href="#" id="logoutBtn">Log out</a>
+  </nav>
+</header>
+
+<section class="hero" id="hero">
+  <div class="hero-bg" id="bg"></div>
+  <div class="copy">
+    <h1 id="title">—</h1>
+    <div class="genres" id="genres"></div>
+    <div class="actions" id="actions"></div>
+    <div class="meta" id="meta"></div>
+    <p class="blurb" id="blurb"></p>
+  </div>
+  <div>
+    <div class="hero-poster" id="poster"></div>
+    <div class="side" id="side" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Cast</h2>
+  <div class="cast" id="cast"></div>
+</section>
+
+<section class="section">
+  <h2>You might also like</h2>
+  <div class="scroller" id="similar"></div>
+</section>
+
+<div id="toast"></div>
+<script src="shared.js"></script>
+<script src="catalog.js"></script>
+<script src="library.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('m') || 'nairobi-half-life';
+const movie = getMovieById(id) || CATALOG[0];
+document.title = movie.title + ' — Yakwetu';
+document.getElementById('bg').style.background = movie.bg;
+document.getElementById('title').textContent = movie.title;
+document.getElementById('genres').textContent = movie.genre;
+document.getElementById('blurb').textContent = movie.blurb || '';
+document.getElementById('meta').innerHTML = `
+  <span><b>${movie.year || '—'}</b></span>
+  <span>${movie.runtime || ''}</span>
+  <span>★ ${movie.rating || '—'}</span>
+  <span>KES ${movie.price}</span>`;
+
+const poster = document.getElementById('poster');
+if (movie.poster) {
+  poster.innerHTML = `<img src="${movie.poster}" alt="" onerror="this.remove();this.parentNode.innerHTML='<div class=fallback style=background:${movie.bg}>${movie.emoji}</div>'">`;
+} else {
+  poster.innerHTML = `<div class="fallback" style="background:${movie.bg}">${movie.emoji}</div>`;
+}
+
+document.getElementById('side').innerHTML = `
+  <div><span>Director</span><b>${movie.director || '—'}</b></div>
+  <div><span>Runtime</span><b>${movie.runtime || '—'}</b></div>
+  <div><span>Release</span><b>${movie.year || '—'}</b></div>
+  <div><span>Price</span><b>KES ${movie.price}</b></div>
+  <div><span>Status</span><b>${isOwned(movie.id) ? 'Unlocked' : 'Locked'}</b></div>`;
+
+document.getElementById('cast').innerHTML = (movie.cast || ['Cast TBA']).map((name, i) => `
+  <div class="p">
+    <div class="av" style="background:${movie.bg}">${['🎬','🎭','🎤','🎧','🌟'][i % 5]}</div>
+    <div class="n">${name}</div>
+    <div class="r">${i === 0 ? 'Lead' : 'Cast'}</div>
+  </div>`).join('');
+
+const owned = isOwned(movie.id);
+document.getElementById('actions').innerHTML = owned
+  ? `<a class="btn play" href="watch.html?m=${encodeURIComponent(movie.id)}">▶ Play</a>
+     <button class="ghost" type="button" onclick="location.href='index.html'">Back</button>`
+  : `<button class="buy" type="button" id="buyBtn">Buy to watch · KES ${movie.price}</button>
+     <button class="ghost" type="button" onclick="track('browse', movie)">More like this</button>`;
+
+const buyBtn = document.getElementById('buyBtn');
+if (buyBtn) {
+  buyBtn.onclick = () => {
+    track('browse', movie);
+    track('checkout_start', movie);
+    const q = new URLSearchParams({ m: movie.id, title: movie.title, genre: movie.genre, price: movie.price });
+    location.href = 'checkout.html?' + q.toString();
+  };
+}
+
+document.getElementById('similar').innerHTML = similarMovies(movie, 12).map((m) => `
+  <article class="tile" onclick="location.href='movie.html?m=${m.id}'">
+    <div class="art" style="background:${m.bg}">
+      ${m.poster ? `<img src="${m.poster}" alt="" onerror="this.remove()">` : ''}
+      <span>${m.emoji}</span>
+    </div>
+    <h4>${m.title}</h4>
+    <div class="g">${m.genre} · KES ${m.price}</div>
+  </article>`).join('');
+
+track('browse', movie);
+</script>
+</body>
+</html>

@@ -4,20 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Now Watching — Yakwetu</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0e0e14;--panel:#17171f;--gold:#e8b54a;--text:#f5f0e6;--muted:#9a94a8;--green:#3ddc84}
-  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
-  body{background:var(--bg);color:var(--text);min-height:100vh}
-  header{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid #23232e}
-  .logo{font-size:26px;font-weight:800;letter-spacing:4px;color:var(--gold);text-decoration:none}
-  .logo span{color:var(--text);font-weight:300}
-  main{max-width:860px;margin:0 auto;padding:40px 20px 120px}
+  :root{--bg:#050508;--panel:#17171f;--gold:#e8b54a;--text:#f5f0e6;--muted:#9a94a8;--green:#3ddc84}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;padding:18px 4vw;border-bottom:1px solid #23232e}
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:3px;color:var(--gold);text-decoration:none}
+  main{max-width:900px;margin:0 auto;padding:32px 20px 120px}
   .status{display:inline-flex;align-items:center;gap:8px;background:#1a2a1a;border:1px solid #2a4a2a;color:var(--green);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;margin-bottom:16px}
   .status .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.4s ease infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   .player{background:#000;border-radius:16px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;border:1px solid #23232e;position:relative;overflow:hidden}
-  .player .emoji{font-size:72px}
-  .bar{position:absolute;bottom:0;left:0;height:5px;background:var(--gold);width:0%;transition:width .5s}
+  .player .emoji{font-size:72px;position:relative;z-index:1}
+  .player .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.35}
+  .bar{position:absolute;bottom:0;left:0;height:5px;background:var(--gold);width:0%;transition:width .5s;z-index:2}
   .controls{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px;align-items:center}
   .controls button{border:none;padding:12px 22px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px}
   .controls #playBtn{background:#2c2c3a;color:var(--text)}
@@ -26,6 +27,8 @@
   .hint{color:var(--muted);font-size:13px;margin-top:14px;line-height:1.5}
   .done{display:none;margin-top:28px;background:var(--panel);border:1px solid var(--gold);border-radius:14px;padding:24px;text-align:center}
   .done .big{font-size:44px}
+  .lock{display:none;margin-top:20px;background:var(--panel);border:1px solid #333;border-radius:14px;padding:28px;text-align:center}
+  .lock a{display:inline-block;margin-top:14px;background:var(--gold);color:#111;padding:12px 20px;border-radius:8px;font-weight:700;text-decoration:none}
   .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid #23232e;padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
   .cfg input{background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;width:280px}
   .cfg button{background:#2c2c3a;color:var(--text);border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
@@ -34,32 +37,40 @@
 </style>
 </head>
 <body>
-<header><a class="logo" href="index.html">YAKWETU<span>·stream</span></a></header>
+<header>
+  <a class="logo" href="index.html">YAKWETU</a>
+  <a href="index.html" style="color:var(--muted);font-size:13px">← Browse</a>
+</header>
 <main>
   <div class="status" id="liveStatus"><span class="dot"></span> Movie started</div>
-  <h1 id="title" style="margin-bottom:6px">—</h1>
+  <h1 id="title" style="margin-bottom:6px;font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:1px">—</h1>
   <p id="genre" style="color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px">—</p>
-  <div class="player">
-    <div class="emoji">🎬</div>
-    <div id="pct" style="color:var(--muted);font-size:14px">Starting…</div>
+  <div class="player" id="player">
+    <div class="emoji" id="emoji">🎬</div>
+    <div id="pct" style="color:var(--muted);font-size:14px;position:relative;z-index:1">Starting…</div>
     <div class="bar" id="bar"></div>
   </div>
-  <div class="controls">
+  <div class="controls" id="controls">
     <button id="playBtn" type="button" onclick="togglePlay()">⏸ Pause</button>
     <button id="finishBtn" type="button" onclick="finish()">Finish watching</button>
   </div>
-  <p class="hint">
-    Playback is live for this demo. When you click <b>Finish watching</b>, we send
-    <code>watch_complete</code> to n8n — YKW-04 will SMS a personalized bundle recommendation.
+  <p class="hint" id="hint">
+    When you click <b>Finish watching</b>, we send <code>watch_complete</code> to n8n —
+    YKW-04 SMS’s a recommendation, and “Because you watched…” appears under your profile on Home.
   </p>
+  <div class="lock" id="lock">
+    <div style="font-size:40px">🔒</div>
+    <h2 style="margin-top:8px">Buy to unlock</h2>
+    <p style="color:var(--muted);margin-top:8px">Demo prices start at KES 5. After payment this title unlocks forever in your library.</p>
+    <a id="buyLink" href="#">Buy to watch</a>
+  </div>
   <div class="done" id="done">
     <div class="big">🍿</div>
     <h2>You finished the movie</h2>
     <p style="color:var(--muted);margin-top:8px;line-height:1.5">
-      Recommendation workflow started. Check your phone for an SMS with a hand-picked bundle
-      (usually within about a minute).
+      Recommendation SMS is on the way. Open Home to see titles under your profile.
     </p>
-    <p style="margin-top:16px"><a href="index.html" style="color:var(--gold)">← Back to browse</a></p>
+    <p style="margin-top:16px"><a href="index.html#because" style="color:var(--gold)">See recommendations →</a></p>
   </div>
 </main>
 <div class="cfg">
@@ -72,25 +83,56 @@
 
 <script src="shared.js"></script>
 <script src="catalog.js"></script>
+<script src="library.js"></script>
 <script>
 const p = new URLSearchParams(location.search);
-const fromCatalog = typeof getMovieById === 'function' ? getMovieById(p.get('m') || '') : null;
+const fromCatalog = getMovieById(p.get('m') || '') || CATALOG[0];
 const movie = {
-  id: p.get('m') || (fromCatalog && fromCatalog.id) || 'nairobi-half-life',
-  title: p.get('title') || (fromCatalog && fromCatalog.title) || 'Nairobi Half Life',
-  genre: p.get('genre') || (fromCatalog && fromCatalog.genre) || 'Crime Drama',
-  price: Number(p.get('price') || (fromCatalog && fromCatalog.price) || 150)
+  id: fromCatalog.id,
+  title: fromCatalog.title,
+  genre: fromCatalog.genre,
+  price: fromCatalog.price,
+  emoji: fromCatalog.emoji,
+  bg: fromCatalog.bg,
+  poster: fromCatalog.poster || '',
 };
-document.getElementById('title').textContent = movie.title;
-document.getElementById('genre').textContent = movie.genre;
-document.title = movie.title + ' — Yakwetu';
 
-let playing = true, pct = 0, timer = null, finished = false;
+document.getElementById('title').textContent = movie.title;
+document.getElementById('genre').textContent = `${movie.genre} · ${fromCatalog.year || ''} · ★ ${fromCatalog.rating || '—'}`;
+document.getElementById('emoji').textContent = movie.emoji;
+document.title = movie.title + ' — Yakwetu';
+document.getElementById('buyLink').href =
+  'checkout.html?' + new URLSearchParams({ m: movie.id, title: movie.title, genre: movie.genre, price: movie.price });
+
+if (movie.poster) {
+  const img = document.createElement('img');
+  img.className = 'bgimg';
+  img.src = movie.poster;
+  img.alt = '';
+  document.getElementById('player').prepend(img);
+} else {
+  document.getElementById('player').style.background = movie.bg;
+}
+
+let playing = false, pct = 0, timer = null, finished = false;
+
+if (!isOwned(movie.id)) {
+  document.getElementById('liveStatus').style.display = 'none';
+  document.getElementById('controls').style.display = 'none';
+  document.getElementById('hint').style.display = 'none';
+  document.getElementById('lock').style.display = 'block';
+  document.getElementById('pct').textContent = 'Locked — buy to watch';
+} else {
+  // Unlock is complete; starting playback confirms ownership in library
+  unlockMovie(movie);
+  startPlayback();
+}
 
 function startPlayback(){
+  playing = true;
   document.getElementById('pct').textContent = 'Playing · 0%';
   document.getElementById('liveStatus').innerHTML = '<span class="dot"></span> Movie started';
-  toast('Movie started — enjoy the film');
+  toast('Unlocked & playing — enjoy');
   timer = setInterval(() => {
     if (!playing || finished) return;
     pct = Math.min(99, pct + 1);
@@ -100,7 +142,7 @@ function startPlayback(){
 }
 
 function togglePlay(){
-  if (finished) return;
+  if (finished || !isOwned(movie.id)) return;
   playing = !playing;
   document.getElementById('playBtn').textContent = playing ? '⏸ Pause' : '▶ Play';
   document.getElementById('pct').textContent = (playing ? 'Playing' : 'Paused') + ' · ' + pct + '%';
@@ -110,7 +152,7 @@ function togglePlay(){
 }
 
 async function finish(){
-  if (finished) return;
+  if (finished || !isOwned(movie.id)) return;
   finished = true;
   clearInterval(timer);
   playing = false;
@@ -122,17 +164,16 @@ async function finish(){
   document.getElementById('finishBtn').textContent = 'Sending…';
   document.getElementById('liveStatus').innerHTML = '<span class="dot" style="animation:none"></span> Finished watching';
 
+  markWatched(movie);
   const r = await track('watch_complete', movie);
   document.getElementById('finishBtn').textContent = 'Finished';
   document.getElementById('done').style.display = 'block';
   if (r && r.error) {
     toast('Could not notify n8n: ' + r.error, true);
   } else {
-    toast('Finished watching — recommendation SMS on the way');
+    toast('Finished — SMS recommendation + Home row updated');
   }
 }
-
-startPlayback();
 </script>
 </body>
 </html>

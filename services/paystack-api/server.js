@@ -703,8 +703,146 @@ app.post('/api/admin/follow-up', requireAdmin, async (req, res) => {
   }
 });
 
+const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
+const OMDB_API_KEY = process.env.OMDB_API_KEY || '';
+const posterCache = new Map(); // id → poster url
+
+async function fetchJson(url, headers = {}) {
+  const r = await fetch(url, {
+    headers: { 'User-Agent': 'YakwetuCatalog/1.0', ...headers },
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function enrichOne(item) {
+  const id = item.id;
+  if (posterCache.has(id)) return posterCache.get(id);
+
+  // 1) TMDB by id or title search (free key: themoviedb.org)
+  if (TMDB_API_KEY) {
+    try {
+      let path = '';
+      if (item.tmdb) {
+        const d = await fetchJson(
+          `https://api.themoviedb.org/3/movie/${item.tmdb}?api_key=${TMDB_API_KEY}`
+        );
+        path = d && d.poster_path;
+      }
+      if (!path && item.title) {
+        const q = encodeURIComponent(item.title);
+        const y = item.year ? `&year=${item.year}` : '';
+        const s = await fetchJson(
+          `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${q}${y}`
+        );
+        const hit = (s && s.results && s.results[0]) || null;
+        path = hit && hit.poster_path;
+      }
+      if (path) {
+        const url = `https://image.tmdb.org/t/p/w500${path}`;
+        posterCache.set(id, url);
+        return url;
+      }
+    } catch (e) {
+      console.warn('tmdb enrich', id, e.message || e);
+    }
+  }
+
+  // 2) OMDb / IMDb poster (free key: omdbapi.com)
+  if (OMDB_API_KEY) {
+    try {
+      let url = '';
+      if (item.imdb) {
+        const d = await fetchJson(
+          `https://www.omdbapi.com/?i=${encodeURIComponent(item.imdb)}&apikey=${OMDB_API_KEY}`
+        );
+        if (d && d.Poster && d.Poster !== 'N/A') url = d.Poster;
+      }
+      if (!url && item.title) {
+        const y = item.year ? `&y=${item.year}` : '';
+        const d = await fetchJson(
+          `https://www.omdbapi.com/?t=${encodeURIComponent(item.title)}${y}&apikey=${OMDB_API_KEY}`
+        );
+        if (d && d.Poster && d.Poster !== 'N/A') url = d.Poster;
+      }
+      if (url) {
+        posterCache.set(id, url);
+        return url;
+      }
+    } catch (e) {
+      console.warn('omdb enrich', id, e.message || e);
+    }
+  }
+
+  // 3) Wikipedia page image (no key)
+  if (item.title) {
+    try {
+      const titles = [
+        item.title,
+        `${item.title} (film)`,
+        item.year ? `${item.title} (${item.year} film)` : null,
+      ].filter(Boolean);
+      for (const t of titles) {
+        const q = encodeURIComponent(t);
+        const d = await fetchJson(
+          `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=thumbnail&pithumbsize=500&titles=${q}&origin=*`
+        );
+        const pages = (d && d.query && d.query.pages) || {};
+        for (const p of Object.values(pages)) {
+          const src = p.thumbnail && p.thumbnail.source;
+          if (src) {
+            const url = String(src).split('?')[0];
+            posterCache.set(id, url);
+            return url;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('wiki enrich', id, e.message || e);
+    }
+  }
+
+  return '';
+}
+
+app.get('/api/catalog/config', (_req, res) => {
+  res.json({
+    tmdb: Boolean(TMDB_API_KEY),
+    omdb: Boolean(OMDB_API_KEY),
+    wikipedia: true,
+  });
+});
+
+app.post('/api/catalog/enrich', async (req, res) => {
+  try {
+    const titles = Array.isArray(req.body && req.body.titles)
+      ? req.body.titles.slice(0, 40)
+      : [];
+    const posters = {};
+    // sequential-ish batches to stay polite to free APIs
+    for (let i = 0; i < titles.length; i += 4) {
+      const batch = titles.slice(i, i + 4);
+      const results = await Promise.all(batch.map((t) => enrichOne(t)));
+      batch.forEach((t, idx) => {
+        if (results[idx]) posters[t.id] = results[idx];
+      });
+    }
+    res.json({
+      posters,
+      sources: {
+        tmdb: Boolean(TMDB_API_KEY),
+        omdb: Boolean(OMDB_API_KEY),
+        wikipedia: true,
+      },
+    });
+  } catch (e) {
+    console.error('catalog enrich', e);
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(
-    `paystack-api on :${PORT} | paystack=${Boolean(PAYSTACK_SECRET_KEY && PAYSTACK_PUBLIC_KEY)} | at_sms=${Boolean(AT_API_KEY && AT_USERNAME)} | n8n=${N8N_EVENT_WEBHOOK}`
+    `paystack-api on :${PORT} | paystack=${Boolean(PAYSTACK_SECRET_KEY && PAYSTACK_PUBLIC_KEY)} | at_sms=${Boolean(AT_API_KEY && AT_USERNAME)} | tmdb=${Boolean(TMDB_API_KEY)} | omdb=${Boolean(OMDB_API_KEY)} | n8n=${N8N_EVENT_WEBHOOK}`
   );
 });

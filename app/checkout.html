@@ -97,6 +97,7 @@
 
 <script src="shared.js"></script>
 <script src="catalog.js"></script>
+<script src="library.js"></script>
 <script>
 const p = new URLSearchParams(location.search);
 const resumed = p.get('resume');
@@ -105,15 +106,25 @@ const movie = {
   id: p.get('m') || (fromCatalog && fromCatalog.id) || 'nairobi-half-life',
   title: p.get('title') || (fromCatalog && fromCatalog.title) || 'Nairobi Half Life',
   genre: p.get('genre') || (fromCatalog && fromCatalog.genre) || 'Crime Drama',
-  price: Number(p.get('price') || (fromCatalog && fromCatalog.price) || 150)
+  price: Number(p.get('price') || (fromCatalog && fromCatalog.price) || 15),
+  emoji: (fromCatalog && fromCatalog.emoji) || '🎬',
+  bg: (fromCatalog && fromCatalog.bg) || '#2b1e3f',
 };
 document.getElementById('mTitle').textContent = movie.title;
 document.getElementById('mGenre').textContent = movie.genre;
 document.getElementById('mPrice').textContent = 'KES ' + movie.price;
+document.getElementById('thumb').textContent = movie.emoji;
+document.getElementById('thumb').style.background = movie.bg;
 document.getElementById('phone').value = USER.phone;
 document.getElementById('email').value = USER.email || '';
-document.getElementById('watchLink').href =
-  'watch.html?m=' + movie.id + '&title=' + encodeURIComponent(movie.title) + '&genre=' + encodeURIComponent(movie.genre);
+document.getElementById('watchLink').href = 'watch.html?m=' + encodeURIComponent(movie.id);
+
+if (typeof isOwned === 'function' && isOwned(movie.id)) {
+  document.getElementById('payView').style.display = 'none';
+  document.getElementById('okView').style.display = 'block';
+  document.querySelector('#okView h2').textContent = 'Already unlocked';
+  document.querySelector('#okView p').textContent = 'This title is in your library — start watching anytime.';
+}
 
 let paystackEnabled = false;
 
@@ -257,10 +268,11 @@ function startSimStk(){
 }
 
 function showSuccess(){
+  if (typeof unlockMovie === 'function') unlockMovie(movie);
   document.getElementById('payView').style.display = 'none';
   document.getElementById('stkView').style.display = 'none';
   document.getElementById('okView').style.display = 'block';
-  toast('Payment received — SMS confirmation on the way');
+  toast('Unlocked — start watching anytime');
 }
 
 function showFail(reason){
