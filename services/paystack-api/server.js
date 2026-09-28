@@ -71,10 +71,18 @@ app.post('/api/events', async (req, res) => {
     });
     const text = await r.text();
     let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = { raw: text };
+    if (!text || !text.trim()) {
+      // n8n sometimes returns 200 with empty body even when workflow ran
+      parsed = {
+        status: r.ok ? 'ok' : 'empty_error',
+        note: 'n8n returned empty body — check Executions tab (not the Editor canvas)',
+      };
+    } else {
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = { raw: text };
+      }
     }
     if (!r.ok) {
       // Surface n8n's hint (e.g. workflow not active) instead of opaque HTML 500
