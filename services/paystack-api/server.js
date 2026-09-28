@@ -43,11 +43,61 @@ app.post(
 app.use(cors());
 app.use(express.json());
 
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', async (_req, res) => {
+  let n8n_ping = { ok: false };
+  try {
+    // Lightweight reachability (n8n healthz), does not fire workflows
+    const base = N8N_EVENT_WEBHOOK.replace(/\/webhook\/.*$/, '');
+    const r = await fetch(base + '/healthz');
+    n8n_ping = { ok: r.ok, status: r.status, base };
+  } catch (e) {
+    n8n_ping = { ok: false, error: String(e.message || e) };
+  }
   res.json({
     ok: true,
     paystack_configured: Boolean(PAYSTACK_SECRET_KEY && PAYSTACK_PUBLIC_KEY),
+    n8n_ping,
+    n8n_event_webhook: N8N_EVENT_WEBHOOK,
   });
+});
+
+/** Same-origin event intake for the storefront / demo-lab (avoids nginx→n8n proxy quirks). */
+app.post('/api/events', async (req, res) => {
+  try {
+    const r = await fetch(N8N_EVENT_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+    });
+    const text = await r.text();
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = { raw: text };
+    }
+    if (!r.ok) {
+      // Surface n8n's hint (e.g. workflow not active) instead of opaque HTML 500
+      return res.status(r.status).json({
+        error: 'n8n_webhook_failed',
+        status: r.status,
+        n8n: parsed,
+        hint:
+          parsed?.hint ||
+          parsed?.message ||
+          'Check YKW 01 is Active (top-right toggle) and Postgres credentials are set.',
+        webhook: N8N_EVENT_WEBHOOK,
+      });
+    }
+    return res.status(200).json(parsed);
+  } catch (e) {
+    console.error('events forward failed', e);
+    return res.status(502).json({
+      error: 'n8n_unreachable',
+      detail: String(e.message || e),
+      webhook: N8N_EVENT_WEBHOOK,
+    });
+  }
 });
 
 app.get('/api/paystack/config', (_req, res) => {

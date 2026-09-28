@@ -35,7 +35,10 @@
 </p>
 
 <label>n8n (optional override)</label>
-<p class="sub" style="margin-top:0">Leave the bottom bar <b>blank</b> so events go to same-origin <code>/webhook/yakwetu-event</code> (fixes Failed to fetch / CORS). Only paste a URL if you know you need a direct n8n host.</p>
+<p class="sub" style="margin-top:0">
+  Leave the bottom bar <b>blank</b> (uses <code>/api/events</code>).
+  <b>YKW 01 must be Active</b> (top-right toggle) — “Listen for test event” is not enough.
+</p>
 
 <input id="phone" placeholder="+2547XXXXXXXX" value="+254702846542">
 <label>Your email (upsell)</label>

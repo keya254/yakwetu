@@ -12,28 +12,23 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        240,
-        300
-      ]
+      "position": [240, 300],
+      "webhookId": "yakwetu-event"
     },
     {
       "parameters": {
-        "jsCode": "// Yakwetu event contract — normalize incoming events from web/app\nconst b = $json.body || $json;\nconst required = ['event_type', 'user_id'];\nfor (const r of required) {\n  if (!b[r]) throw new Error(`Missing required field: ${r}`);\n}\nconst VALID = ['signup','browse','checkout_start','payment_failed','payment_success','watch_complete'];\nif (!VALID.includes(b.event_type)) throw new Error('Unknown event_type: ' + b.event_type);\n\nreturn [{ json: {\n  event_type: b.event_type,\n  user_id: String(b.user_id),\n  name: b.name || '',\n  phone: (b.phone || '').replace(/\\s/g,''),\n  email: b.email || '',\n  session_id: b.session_id || ('sess_' + Date.now()),\n  movie_id: b.movie_id || null,\n  movie_title: b.movie_title || null,\n  genre: b.genre || null,\n  price_kes: b.price_kes || null,\n  failure_reason: b.failure_reason || null,\n  channel_pref: b.channel_pref || 'sms',\n  ts: b.ts || new Date().toISOString()\n}}];"
+        "jsCode": "// Yakwetu event contract — normalize incoming events from web/app\nconst b = $json.body || $json;\nconst required = ['event_type', 'user_id'];\nfor (const r of required) {\n  if (!b[r]) throw new Error(`Missing required field: ${r}`);\n}\nconst VALID = ['signup','browse','checkout_start','payment_failed','payment_success','watch_complete'];\nif (!VALID.includes(b.event_type)) throw new Error('Unknown event_type: ' + b.event_type);\n\nreturn [{ json: {\n  event_type: b.event_type,\n  user_id: String(b.user_id),\n  name: b.name || '',\n  phone: String(b.phone || '').replace(/\\s/g,''),\n  email: b.email || '',\n  session_id: b.session_id || ('sess_' + Date.now()),\n  movie_id: b.movie_id || null,\n  movie_title: b.movie_title || null,\n  genre: b.genre || null,\n  price_kes: b.price_kes || null,\n  failure_reason: b.failure_reason || null,\n  channel_pref: b.channel_pref || 'sms',\n  ts: b.ts || new Date().toISOString()\n}}];"
       },
       "id": "d4773697-1b41-48ba-ae06-3e68587104b3",
       "name": "Normalize & Validate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        460,
-        300
-      ]
+      "position": [460, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO users (user_id, name, phone, email, channel_pref, last_seen)\nVALUES ($1,$2,$3,$4,$5, NOW())\nON CONFLICT (user_id) DO UPDATE SET\n  name = COALESCE(NULLIF(EXCLUDED.name,''), users.name),\n  phone = COALESCE(NULLIF(EXCLUDED.phone,''), users.phone),\n  email = COALESCE(NULLIF(EXCLUDED.email,''), users.email),\n  last_seen = NOW();",
+        "query": "INSERT INTO users (user_id, name, phone, email, channel_pref, last_seen)\nVALUES ($1,$2,$3,$4,$5, NOW())\nON CONFLICT (user_id) DO UPDATE SET\n  name = COALESCE(NULLIF(EXCLUDED.name,''), users.name),\n  phone = COALESCE(NULLIF(EXCLUDED.phone,''), users.phone),\n  email = COALESCE(NULLIF(EXCLUDED.email,''), users.email),\n  channel_pref = COALESCE(EXCLUDED.channel_pref, users.channel_pref),\n  last_seen = NOW()\nRETURNING user_id;",
         "options": {
           "queryReplacement": "={{ [$json.user_id, $json.name, $json.phone, $json.email, $json.channel_pref] }}"
         }
@@ -42,21 +37,29 @@
       "name": "Upsert User",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [
-        680,
-        300
-      ],
+      "position": [680, 300],
       "credentials": {
         "postgres": {
           "id": "1",
           "name": "Yakwetu Postgres"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Postgres replace $json — restore the normalized event for downstream nodes\nconst ev = $('Normalize & Validate').first().json;\nreturn [{ json: { ...ev } }];"
+      },
+      "id": "a11a0001-restore-after-upsert",
+      "name": "Restore Event After Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [790, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO events (user_id, session_id, event_type, movie_id, movie_title, genre, price_kes, failure_reason, ts)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);\nINSERT INTO sessions (session_id, user_id, state, last_activity, last_movie_id, last_movie_title, last_genre, last_price)\nVALUES ($2,$1,\n  CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE 'browsing' END,\n  NOW(), $4,$5,$6,$7)\nON CONFLICT (session_id) DO UPDATE SET\n  state = CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE sessions.state END,\n  last_activity = NOW(),\n  last_movie_id = COALESCE($4, sessions.last_movie_id),\n  last_movie_title = COALESCE($5, sessions.last_movie_title),\n  last_genre = COALESCE($6, sessions.last_genre),\n  last_price = COALESCE($7, sessions.last_price),\n  recovered = CASE WHEN $3='payment_success' THEN true ELSE sessions.recovered END;",
+        "query": "INSERT INTO events (user_id, session_id, event_type, movie_id, movie_title, genre, price_kes, failure_reason, ts)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz);\nINSERT INTO sessions (session_id, user_id, state, last_activity, last_movie_id, last_movie_title, last_genre, last_price)\nVALUES ($2,$1,\n  CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE 'browsing' END,\n  NOW(), $4,$5,$6,$7)\nON CONFLICT (session_id) DO UPDATE SET\n  state = CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE sessions.state END,\n  last_activity = NOW(),\n  last_movie_id = COALESCE($4, sessions.last_movie_id),\n  last_movie_title = COALESCE($5, sessions.last_movie_title),\n  last_genre = COALESCE($6, sessions.last_genre),\n  last_price = COALESCE($7, sessions.last_price),\n  recovered = CASE WHEN $3='payment_success' THEN true ELSE sessions.recovered END\nRETURNING session_id;",
         "options": {
           "queryReplacement": "={{ [$json.user_id, $json.session_id, $json.event_type, $json.movie_id, $json.movie_title, $json.genre, $json.price_kes, $json.failure_reason, $json.ts] }}"
         }
@@ -65,61 +68,96 @@
       "name": "Log Event",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [
-        900,
-        300
-      ],
+      "position": [900, 300],
       "credentials": {
         "postgres": {
           "id": "1",
           "name": "Yakwetu Postgres"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: { ...ev } }];"
+      },
+      "id": "a11a0002-restore-after-log",
+      "name": "Restore Event After Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1010, 300]
     },
     {
       "parameters": {
         "rules": {
-          "rules": [
+          "values": [
             {
-              "operation": "equal",
-              "value1": "={{ $json.event_type }}",
-              "value2": "payment_failed"
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "payment_failed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "payment_failed"
             },
             {
-              "operation": "equal",
-              "value1": "={{ $json.event_type }}",
-              "value2": "watch_complete"
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "watch_complete",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "watch_complete"
             },
             {
-              "operation": "equal",
-              "value1": "={{ $json.event_type }}",
-              "value2": "payment_success"
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "payment_success",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "payment_success"
             }
           ]
         },
-        "fallbackOutput": "extra"
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "d8037821-cf36-46e0-bbe7-6479597d3377",
       "name": "Route by Event",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [
-        1120,
-        300
-      ]
+      "position": [1120, 300]
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
           "value": "",
-          "mode": "id"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": []
+          "mode": "list",
+          "cachedResultName": "YKW 03 — Payment Failure Rescue"
         },
         "options": {
           "waitForSubWorkflow": false
@@ -129,23 +167,16 @@
       "name": "Trigger Payment Rescue",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.1,
-      "position": [
-        1360,
-        140
-      ]
+      "position": [1360, 140],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
           "value": "",
-          "mode": "id"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": []
+          "mode": "list",
+          "cachedResultName": "YKW 04 — Post-Watch Personalized Upsell"
         },
         "options": {
           "waitForSubWorkflow": false
@@ -155,158 +186,78 @@
       "name": "Trigger Post-Watch Upsell",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.1,
-      "position": [
-        1360,
-        300
-      ]
+      "position": [1360, 300],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE nudges SET converted = true, converted_at = NOW()\nWHERE user_id = $1 AND converted = false\n  AND sent_at > NOW() - INTERVAL '72 hours';",
+        "query": "UPDATE nudges SET converted = true, converted_at = NOW()\nWHERE user_id = $1 AND converted = false\n  AND sent_at > NOW() - INTERVAL '72 hours'\nRETURNING id;",
         "options": {
-          "queryReplacement": "={{ [$json.user_id] }}"
+          "queryReplacement": "={{ [$('Normalize & Validate').item.json.user_id] }}"
         }
       },
       "id": "ecb3b97b-1361-45fa-91d1-369190218636",
       "name": "Check Recovery Attribution",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [
-        1360,
-        460
-      ],
+      "position": [1360, 460],
       "credentials": {
         "postgres": {
           "id": "1",
           "name": "Yakwetu Postgres"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\"status\":\"ok\",\"event\":\"\" + $json.event_type}"
+        "responseBody": "={{ JSON.stringify({ status: 'ok', event: $('Normalize & Validate').item.json.event_type, session_id: $('Normalize & Validate').item.json.session_id }) }}",
+        "options": {}
       },
       "id": "2132f950-5770-4812-8ac0-4226ed2f5a7f",
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [
-        1600,
-        300
-      ]
+      "position": [1600, 300]
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Normalize & Validate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Normalize & Validate", "type": "main", "index": 0 }]]
     },
     "Normalize & Validate": {
-      "main": [
-        [
-          {
-            "node": "Upsert User",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Upsert User", "type": "main", "index": 0 }]]
     },
     "Upsert User": {
-      "main": [
-        [
-          {
-            "node": "Log Event",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Restore Event After Upsert", "type": "main", "index": 0 }]]
+    },
+    "Restore Event After Upsert": {
+      "main": [[{ "node": "Log Event", "type": "main", "index": 0 }]]
     },
     "Log Event": {
-      "main": [
-        [
-          {
-            "node": "Route by Event",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Restore Event After Log", "type": "main", "index": 0 }]]
+    },
+    "Restore Event After Log": {
+      "main": [[{ "node": "Route by Event", "type": "main", "index": 0 }]]
     },
     "Route by Event": {
       "main": [
-        [
-          {
-            "node": "Trigger Payment Rescue",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Trigger Post-Watch Upsell",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Check Recovery Attribution",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond OK",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Trigger Payment Rescue", "type": "main", "index": 0 }],
+        [{ "node": "Trigger Post-Watch Upsell", "type": "main", "index": 0 }],
+        [{ "node": "Check Recovery Attribution", "type": "main", "index": 0 }],
+        [{ "node": "Respond OK", "type": "main", "index": 0 }]
       ]
     },
     "Trigger Payment Rescue": {
-      "main": [
-        [
-          {
-            "node": "Respond OK",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
     },
     "Trigger Post-Watch Upsell": {
-      "main": [
-        [
-          {
-            "node": "Respond OK",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
     },
     "Check Recovery Attribution": {
-      "main": [
-        [
-          {
-            "node": "Respond OK",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
