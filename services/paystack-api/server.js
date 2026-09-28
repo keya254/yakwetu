@@ -43,12 +43,15 @@ app.post(
 app.use(cors());
 app.use(express.json());
 
+app.get('/api/ping', (_req, res) => res.json({ ok: true }));
+
 app.get('/api/health', async (_req, res) => {
   let n8n_ping = { ok: false };
   try {
-    // Lightweight reachability (n8n healthz), does not fire workflows
     const base = N8N_EVENT_WEBHOOK.replace(/\/webhook\/.*$/, '');
-    const r = await fetch(base + '/healthz');
+    const r = await fetch(base + '/healthz', {
+      signal: AbortSignal.timeout(3000),
+    });
     n8n_ping = { ok: r.ok, status: r.status, base };
   } catch (e) {
     n8n_ping = { ok: false, error: String(e.message || e) };
