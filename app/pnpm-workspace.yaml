@@ -1,0 +1,8 @@
+# Packages whose install scripts must run: esbuild (tsx) fetches its binary,
+# Prisma downloads its engines, sharp powers next/image.
+allowBuilds:
+  esbuild: true
+  prisma: true
+  '@prisma/engines': true
+  sharp: true
+  unrs-resolver: true
