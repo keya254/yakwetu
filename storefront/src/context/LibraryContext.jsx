@@ -1,10 +1,12 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { CATALOG, getMovieById, similarMovies } from '../data/catalog';
+import { similarMovies } from '../data/catalog';
+import { useCatalog } from './CatalogContext';
 import { loadLibrary, loadWatched, saveLibrary, saveWatched } from '../lib/storage';
 
 const LibraryContext = createContext(null);
 
 export function LibraryProvider({ children }) {
+  const { movies, getById } = useCatalog();
   const [library, setLibrary] = useState(() => loadLibrary());
   const [watched, setWatched] = useState(() => loadWatched());
 
@@ -19,7 +21,7 @@ export function LibraryProvider({ children }) {
           id: movie.id,
           title: movie.title,
           genre: movie.genre,
-          price: movie.price,
+          price: movie.price || 5,
           unlockedAt: new Date().toISOString(),
         },
       };
@@ -48,24 +50,24 @@ export function LibraryProvider({ children }) {
   const ownedMovies = useMemo(
     () =>
       Object.keys(library)
-        .map((id) => getMovieById(id))
+        .map((id) => getById(id))
         .filter(Boolean),
-    [library]
+    [library, getById]
   );
 
   const recommendations = useMemo(() => {
     if (!watched.length) {
       return {
         headline: 'Recommended for you',
-        items: CATALOG.slice(0, 12),
+        items: movies.slice(0, 12),
       };
     }
     const last = watched[0];
-    const seed = getMovieById(last.id);
+    const seed = getById(last.id) || last;
     const watchedIds = new Set(watched.map((w) => w.id));
-    let items = seed ? similarMovies(seed, 16).filter((m) => !watchedIds.has(m.id)) : [];
-    if (items.length < 12) {
-      for (const m of CATALOG) {
+    let items = similarMovies(seed, 16, movies).filter((m) => !watchedIds.has(m.id));
+    if (items.length < 8) {
+      for (const m of movies) {
         if (watchedIds.has(m.id) || items.some((x) => x.id === m.id)) continue;
         items.push(m);
         if (items.length >= 12) break;
@@ -75,7 +77,7 @@ export function LibraryProvider({ children }) {
       headline: `Because you watched ${last.title}`,
       items: items.slice(0, 12),
     };
-  }, [watched]);
+  }, [watched, movies, getById]);
 
   const value = useMemo(
     () => ({

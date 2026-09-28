@@ -8,7 +8,7 @@ import { track } from '../lib/track';
 
 export default function MoviePage() {
   const { id } = useParams();
-  const { getById } = useCatalog();
+  const { getById, movies } = useCatalog();
   const { isOwned } = useLibrary();
   const navigate = useNavigate();
   const movie = getById(id);
@@ -32,7 +32,7 @@ export default function MoviePage() {
   }
 
   const owned = isOwned(movie.id);
-  const similar = similarMovies(movie, 12).map((m) => getById(m.id) || m);
+  const similar = similarMovies(movie, 12, movies).map((m) => getById(m.id) || m);
 
   return (
     <>

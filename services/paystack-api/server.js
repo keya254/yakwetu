@@ -820,7 +820,8 @@ app.get('/api/catalog/config', (_req, res) => {
   res.json({
     tmdb: Boolean(TMDB_API_KEY),
     omdb: Boolean(OMDB_API_KEY),
-    wikipedia: true,
+    wikipedia: !TMDB_API_KEY && !OMDB_API_KEY,
+    kenya_endpoint: true,
   });
 });
 
@@ -848,6 +849,139 @@ app.post('/api/catalog/enrich', async (req, res) => {
   } catch (e) {
     console.error('catalog enrich', e);
     res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+const kenyaCatalogCache = { at: 0, movies: [] };
+const KENYA_CACHE_MS = 6 * 60 * 60 * 1000;
+const BGS = [
+  '#1a1528', '#3f1e3a', '#2a1010', '#102820', '#2a2818', '#2a2430',
+  '#252030', '#1a1a28', '#1a2a1a', '#201818', '#1e2838', '#2a1e28',
+];
+
+function slugify(title) {
+  return String(title || 'movie')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48) || 'movie';
+}
+
+function formatRuntime(mins) {
+  const n = Number(mins) || 0;
+  if (!n) return '';
+  if (n < 60) return `${n}m`;
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+async function fetchKenyanMovies(limit = 12) {
+  if (!TMDB_API_KEY) return null;
+  const now = Date.now();
+  if (kenyaCatalogCache.movies.length && now - kenyaCatalogCache.at < KENYA_CACHE_MS) {
+    return kenyaCatalogCache.movies.slice(0, limit);
+  }
+
+  // Kenyan origin productions, most popular first
+  const discover = await fetchJson(
+    `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}` +
+      `&with_origin_country=KE&sort_by=popularity.desc&include_adult=false&page=1`,
+    {},
+    8000
+  );
+  let results = (discover && discover.results) || [];
+
+  // Fallback: Kenya keyword / production search if discover is thin
+  if (results.length < 6) {
+    const search = await fetchJson(
+      `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}` +
+        `&query=${encodeURIComponent('Kenya')}&include_adult=false`,
+      {},
+      8000
+    );
+    const extra = (search && search.results) || [];
+    const seen = new Set(results.map((r) => r.id));
+    for (const r of extra) {
+      if (!seen.has(r.id)) {
+        results.push(r);
+        seen.add(r.id);
+      }
+    }
+  }
+
+  results = results.slice(0, Math.min(limit, 16));
+  const movies = [];
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    const detail = await fetchJson(
+      `https://api.themoviedb.org/3/movie/${r.id}?api_key=${TMDB_API_KEY}` +
+        `&append_to_response=credits`,
+      {},
+      6000
+    );
+    const d = detail || r;
+    const genres = (d.genres || []).map((g) => g.name);
+    const genre = genres.slice(0, 2).join(' ') || 'Drama';
+    const crew = (d.credits && d.credits.crew) || [];
+    const cast = ((d.credits && d.credits.cast) || [])
+      .slice(0, 4)
+      .map((c) => c.name);
+    const director =
+      (crew.find((c) => c.job === 'Director') || {}).name || 'Kenyan cinema';
+    const year = String(d.release_date || r.release_date || '').slice(0, 4);
+    const poster = d.poster_path || r.poster_path
+      ? `https://image.tmdb.org/t/p/w500${d.poster_path || r.poster_path}`
+      : '';
+
+    movies.push({
+      id: slugify(d.title || r.title) || `tmdb-${r.id}`,
+      title: d.title || r.title,
+      year: year ? Number(year) : null,
+      genre,
+      price: 5,
+      bg: BGS[i % BGS.length],
+      runtime: formatRuntime(d.runtime),
+      rating: d.vote_average ? String(Number(d.vote_average).toFixed(1)) : '—',
+      director,
+      cast: cast.length ? cast : ['Cast TBA'],
+      blurb: d.overview || r.overview || 'A Kenyan story on Yakwetu.',
+      tmdb: r.id,
+      imdb: '',
+      poster,
+      origin: 'KE',
+    });
+  }
+
+  if (movies.length) {
+    kenyaCatalogCache.at = now;
+    kenyaCatalogCache.movies = movies;
+  }
+  return movies;
+}
+
+app.get('/api/catalog/kenya', async (req, res) => {
+  try {
+    const limit = Math.min(20, Math.max(4, Number(req.query.limit) || 12));
+    if (!TMDB_API_KEY) {
+      return res.json({
+        ok: false,
+        source: 'fallback',
+        error: 'TMDB_API_KEY not set — using static Kenyan catalog on the client',
+        movies: [],
+      });
+    }
+    const movies = await fetchKenyanMovies(limit);
+    res.json({
+      ok: true,
+      source: 'tmdb',
+      count: (movies || []).length,
+      movies: movies || [],
+    });
+  } catch (e) {
+    console.error('catalog kenya', e);
+    res.status(500).json({ ok: false, error: String(e.message || e), movies: [] });
   }
 });
 
