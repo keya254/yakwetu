@@ -124,7 +124,8 @@ async function fire(type, movie, extra={}){
 }
 
 async function triggerAbandonScan(sessionId){
-  const url = location.origin.replace(/\/$/, '') + '/api/demo/abandon-scan';
+  const base = location.origin.replace(/\/$/, '') + '/api/demo/abandon-scan';
+  const url = base + '?session_id=' + encodeURIComponent(sessionId);
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

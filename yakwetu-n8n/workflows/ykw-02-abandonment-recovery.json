@@ -40,31 +40,31 @@
     },
     {
       "parameters": {
-        "jsCode": "const b = $json.body || $json;\nconst session_id = b.session_id || null;\nconst force = b.force !== false;\nreturn [{ json: { session_id, force, source: b.source || 'webhook' } }];"
+        "jsCode": "let raw = $json.body !== undefined ? $json.body : $json;\nif (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (e) { raw = {}; } }\nconst q = $json.query || {};\nconst session_id = (raw && raw.session_id) || q.session_id || $json.session_id || null;\nif (!session_id) {\n  throw new Error('Demo abandon-scan needs session_id in JSON body or ?session_id=');\n}\nreturn [{ json: { session_id: String(session_id), force: true, source: (raw && raw.source) || 'demo-lab' } }];"
       },
       "id": "a11a-ykw02-prepare-demo",
       "name": "Prepare Demo Scan",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        360,
+        400,
         520
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE sessions\nSET last_activity = NOW() - INTERVAL '50 minutes',\n    recovered = false,\n    state = CASE WHEN state IN ('purchased','browsing') THEN 'checkout' ELSE state END,\n    nudge_count = 0,\n    last_nudge_at = NULL\nWHERE $1::text IS NOT NULL AND length($1::text) > 0 AND session_id = $1;\nSELECT $1::text AS session_id, 'aged_or_skipped' AS status;",
+        "query": "UPDATE sessions\nSET last_activity = NOW() - INTERVAL '50 minutes',\n    recovered = false,\n    state = 'checkout',\n    nudge_count = 0,\n    last_nudge_at = NULL\nWHERE session_id = $1;\n\nSELECT s.session_id, s.user_id, s.state, s.last_movie_id, s.last_movie_title,\n       s.last_genre, s.last_price, s.nudge_count, u.name, u.phone, u.email, u.channel_pref\nFROM sessions s\nJOIN users u ON u.user_id = s.user_id\nWHERE s.session_id = $1\n  AND s.recovered = false;",
         "options": {
           "queryReplacement": "={{ [$json.session_id] }}"
         }
       },
-      "id": "a11a-ykw02-age-demo",
-      "name": "Age Demo Session",
+      "id": "a11a-ykw02-age-find-demo",
+      "name": "Age + Find Demo Session",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        560,
+        620,
         520
       ],
       "credentials": {
@@ -74,19 +74,6 @@
         }
       },
       "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Always continue to Find Abandoned (age may return 0 rows)\nlet session_id = null;\ntry { session_id = $('Prepare Demo Scan').first().json.session_id; } catch (e) {}\nreturn [{ json: { ok: true, session_id } }];"
-      },
-      "id": "a11a-ykw02-continue-after-age",
-      "name": "Continue After Age",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        760,
-        520
-      ]
     },
     {
       "parameters": {
@@ -111,7 +98,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Suppress nudges 21:00\u201308:00 EAT unless demo/manual webhook scan\nlet force = false;\ntry { force = Boolean($('Demo / Manual Scan').isExecuted); } catch (e) { force = false; }\nif (force) return $input.all();\nconst now = new Date();\nconst eat = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));\nconst h = eat.getHours();\nif (h >= 21 || h < 8) {\n  console.log('Quiet hours in EAT \u2014 skipping run');\n  return [];\n}\nreturn $input.all();"
+        "jsCode": "let force = false;\ntry { force = Boolean($('Demo / Manual Scan').isExecuted); } catch (e) { force = false; }\nif (force) return $input.all();\nconst now = new Date();\nconst eat = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));\nconst h = eat.getHours();\nif (h >= 21 || h < 8) return [];\nreturn $input.all();"
       },
       "id": "2c484a2a-9693-4543-aabb-2326f91c5bd0",
       "name": "Quiet Hours Gate (EAT)",
@@ -409,29 +396,18 @@
       "main": [
         [
           {
-            "node": "Age Demo Session",
+            "node": "Age + Find Demo Session",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Age Demo Session": {
+    "Age + Find Demo Session": {
       "main": [
         [
           {
-            "node": "Continue After Age",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Continue After Age": {
-      "main": [
-        [
-          {
-            "node": "Find Abandoned Sessions",
+            "node": "Quiet Hours Gate (EAT)",
             "type": "main",
             "index": 0
           }
