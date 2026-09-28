@@ -8,7 +8,8 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { requireSession } from "@/lib/auth";
-import { getMovie, getSimilar } from "@/lib/catalog/queries";
+import { getMovie } from "@/lib/catalog/queries";
+import { getMoreLikeThis } from "@/lib/catalog/recommended";
 import { formatKes, formatRuntime, genreLabel } from "@/lib/format";
 
 export async function generateMetadata({ params }: PageProps<"/movie/[id]">): Promise<Metadata> {
@@ -18,10 +19,10 @@ export async function generateMetadata({ params }: PageProps<"/movie/[id]">): Pr
 
 export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
   const { id } = await params;
-  await requireSession(`/movie/${id}`);
+  const session = await requireSession(`/movie/${id}`);
   const movie = await getMovie(id);
   if (!movie) notFound();
-  const similar = await getSimilar(movie.id, movie.genres);
+  const similar = await getMoreLikeThis(session.user.id, movie);
 
   const facts = [movie.year, formatRuntime(movie.runtimeMin), movie.rated].filter(Boolean);
   const genres = movie.genres.filter((genre) => genre !== "short");
@@ -70,7 +71,7 @@ export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
         </section>
 
         <div className="mt-12">
-          <MovieRow title="More like this" movies={similar} />
+          <MovieRow title="More like this" movies={similar.movies} />
         </div>
       </main>
       <SiteFooter />

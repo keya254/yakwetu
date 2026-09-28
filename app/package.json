@@ -12,7 +12,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
     "catalog:seed": "tsx scripts/seed-catalog.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "recs:sync": "tsx scripts/sync-recs.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

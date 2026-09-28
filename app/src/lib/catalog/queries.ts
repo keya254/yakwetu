@@ -77,3 +77,11 @@ export async function getSimilar(id: string, genres: string[], limit = 8): Promi
     select: cardSelect,
   });
 }
+
+/** Cards for these ids, in the given order. Ids the catalog doesn't know are skipped. */
+export async function getMoviesByIds(ids: string[]): Promise<MovieCardData[]> {
+  if (ids.length === 0) return [];
+  const rows = await prisma.movie.findMany({ where: { id: { in: ids } }, select: cardSelect });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
+}
