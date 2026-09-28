@@ -17,6 +17,7 @@
   .card button{background:var(--gold);color:#0e0e14;border:none;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;width:100%}
   .card button:hover{filter:brightness(1.08)}
   .card button.danger{background:#3a2a2a;color:#ffb4b4}
+  .card.featured{border-color:var(--gold)}
   label{font-size:12px;color:var(--muted);display:block;margin:12px 0 4px}
   input{width:100%;max-width:420px;background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px}
   #log{margin-top:28px;max-width:960px;background:#101018;border:1px solid #23232e;border-radius:12px;padding:14px;font-family:ui-monospace,monospace;font-size:12px;max-height:280px;overflow:auto;white-space:pre-wrap}
@@ -24,20 +25,23 @@
   .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid #23232e;padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
   .cfg input{width:280px;margin:0;padding:6px 10px;font-size:12px}
   .cfg button{background:#2c2c3a;color:var(--text);border:none;padding:6px 12px;border-radius:6px;cursor:pointer}
+  #toast{position:fixed;top:16px;right:16px;z-index:50;display:flex;flex-direction:column;gap:8px}
+  .t{background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px}
+  .t.err{border-color:#ff5c5c;color:#ffb4b4}
 </style>
 </head>
 <body>
+<div id="toast"></div>
 <h1>YAKWETU · demo lab</h1>
 <p class="sub">
-  Fire dummy events into n8n to test workflows. Set your phone (Africa's Talking SMS)
-  and n8n base URL below. Also load SQL seed for idle abandonment fixtures:
-  <code>yakwetu-n8n/seed-demo.sql</code>
+  Fire events into n8n. <b>Simulate abandon → SMS</b> pretends someone already left checkout
+  50 minutes ago (no real wait), then runs YKW-02 so you get the “finish payment” SMS immediately.
+  Keep YKW-01 and YKW-02 <b>Active</b>.
 </p>
 
 <label>n8n (optional override)</label>
 <p class="sub" style="margin-top:0">
-  Leave the bottom bar <b>blank</b> (uses <code>/api/events</code>).
-  <b>YKW 01 must be Active</b> (top-right toggle) — “Listen for test event” is not enough.
+  Leave the bottom bar blank (uses <code>/api/events</code>).
 </p>
 
 <input id="phone" placeholder="+2547XXXXXXXX" value="+254702846542">
@@ -47,19 +51,19 @@
 <input id="name" value="Wanjiku Mwangi">
 
 <div class="grid" style="margin-top:24px">
+  <div class="card featured">
+    <h2>A — Simulate abandon → SMS</h2>
+    <p>No waiting. Creates a checkout session already idle 50 min, then scans → SMS to finish payment.</p>
+    <button onclick="runSimulateAbandon()">Simulate abandon → SMS</button>
+  </div>
   <div class="card">
     <h2>A — Browse trail</h2>
     <p>3 browse events so AI has titles for later nudges.</p>
     <button onclick="runBrowse()">Send browses</button>
   </div>
   <div class="card">
-    <h2>A — Start abandon session</h2>
-    <p>Checkout start, no payment. Wait for YKW-02 idle window, then scanner nudges.</p>
-    <button onclick="runAbandonSetup()">Open checkout (no pay)</button>
-  </div>
-  <div class="card">
     <h2>B — Payment failed</h2>
-    <p>Insufficient funds → should trigger YKW-03 WhatsApp rescue in seconds.</p>
+    <p>Insufficient funds. Needs YKW-03 Active for rescue SMS.</p>
     <button class="danger" onclick="runPayFail()">Simulate pay fail</button>
   </div>
   <div class="card">
@@ -69,12 +73,12 @@
   </div>
   <div class="card">
     <h2>B/A — Payment success</h2>
-    <p>Marks session recovered + attributes open nudges.</p>
+    <p>Payment received SMS + marks session recovered.</p>
     <button onclick="runPaySuccess()">Simulate success</button>
   </div>
   <div class="card">
     <h2>C — Watch complete</h2>
-    <p>Triggers YKW-04 upsell (after wait node). Shorten waits for demos.</p>
+    <p>Triggers YKW-04 upsell (after wait node).</p>
     <button onclick="runWatch()">Finish watching</button>
   </div>
 </div>
@@ -82,7 +86,7 @@
 <div id="log">Ready.</div>
 <p style="margin-top:16px;font-size:13px;color:var(--muted)">
   <a href="index.html">← Storefront</a> ·
-  Workflows must be active; YKW-01 must point Execute Workflow → 03 &amp; 04.
+  Re-import/Publish YKW-01 + YKW-02 after pulling these workflow updates.
 </p>
 
 <div class="cfg">
@@ -119,6 +123,38 @@ async function fire(type, movie, extra={}){
   return r;
 }
 
+async function triggerAbandonScan(){
+  const url = location.origin.replace(/\/$/, '') + '/api/demo/abandon-scan';
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: true, source: 'demo-lab' })
+  });
+  const text = await r.text();
+  let body;
+  try { body = JSON.parse(text); } catch { body = { raw: text, status: r.status }; }
+  log(`abandon-scan → ${JSON.stringify(body)}  (${url})`);
+  if (!r.ok) throw new Error(body.message || body.error || `scan HTTP ${r.status}`);
+  return body;
+}
+
+async function runSimulateAbandon(){
+  log('--- simulate abandon → SMS (no wait: backdate idle 50 min) ---');
+  const sess = newSession();
+  log('Fresh session: ' + sess);
+  await fire('browse', M.nights);
+  await fire('checkout_start', M.nights);
+  await fire('demo_abandon', M.nights); // YKW-01 sets last_activity = now - 50 min
+  try {
+    await triggerAbandonScan();
+    toast('Already-abandoned session scanned — check phone + YKW-02');
+    log('DB pretends idle 50 min → YKW-02 should SMS resume/finish payment');
+  } catch (e) {
+    log('Scan failed: ' + e.message + ' (is YKW-02 Active with Demo/Manual Scan webhook?)');
+    toast(String(e.message || e), true);
+  }
+}
+
 async function runBrowse(){
   log('--- browse trail ---');
   await fire('browse', M.kifaru);
@@ -127,36 +163,30 @@ async function runBrowse(){
   toast('Browse events sent');
 }
 
-async function runAbandonSetup(){
-  log('--- abandon setup ---');
-  await fire('browse', M.nights);
-  await fire('checkout_start', M.nights);
-  log('Stop here. Wait for YKW-02 (45 min or your demo idle). Session: ' + SESSION_ID);
-  toast('Checkout started — do not pay; wait for scanner');
-}
-
 async function runPayFail(reason='Insufficient balance'){
   log('--- payment_failed: ' + reason + ' ---');
+  newSession();
   await fire('checkout_start', M.nights);
   await fire('payment_failed', M.nights, { failure_reason: reason });
-  toast('payment_failed sent — check WhatsApp / n8n Executions');
+  toast('payment_failed sent — needs YKW-03 for SMS');
 }
 
 async function runPaySuccess(){
   log('--- payment_success ---');
+  newSession();
   await fire('checkout_start', M.katana);
   await fire('payment_success', M.katana);
-  toast('payment_success sent');
+  toast('payment_success sent — expect payment SMS');
 }
 
 async function runWatch(){
   log('--- watch_complete ---');
+  newSession();
   await fire('payment_success', M.nights);
   await fire('watch_complete', M.nights);
-  toast('watch_complete sent — check email after wait');
+  toast('watch_complete sent — check YKW-04');
 }
 
-// Clear any old cross-origin n8n URL that caused Failed to fetch
 (function(){
   const el = document.getElementById('whBase');
   const saved = localStorage.getItem('ykw_base') || '';

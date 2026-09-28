@@ -13,11 +13,18 @@ const USER = JSON.parse(localStorage.getItem('ykw_user') || 'null') || (() => {
   return u;
 })();
 
-const SESSION_ID = localStorage.getItem('ykw_session') || (() => {
+let SESSION_ID = localStorage.getItem('ykw_session') || (() => {
   const s = 'sess_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   localStorage.setItem('ykw_session', s);
   return s;
 })();
+
+/** Start a fresh session (needed after payment_success so abandon can fire again). */
+function newSession(){
+  SESSION_ID = 'sess_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  localStorage.setItem('ykw_session', SESSION_ID);
+  return SESSION_ID;
+}
 
 function webhookUrl(){
   const saved = (localStorage.getItem('ykw_base') || '').trim().replace(/\/$/, '');
@@ -51,7 +58,7 @@ async function track(event_type, movie, extra = {}){
   const payload = {
     event_type,
     user_id: USER.user_id, name: USER.name, phone: USER.phone, email: USER.email,
-    session_id: SESSION_ID,
+    session_id: (typeof currentSession === 'function' ? currentSession() : SESSION_ID),
     movie_id: movie?.id || null, movie_title: movie?.title || null,
     genre: movie?.genre || null, price_kes: movie?.price || null,
     ts: new Date().toISOString(), ...extra

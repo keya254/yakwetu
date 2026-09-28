@@ -1,5 +1,5 @@
 {
-  "name": "YKW 02 — Browse & Cart Abandonment Recovery",
+  "name": "YKW 02 \u2014 Browse & Cart Abandonment Recovery",
   "nodes": [
     {
       "parameters": {
@@ -20,6 +20,23 @@
         240,
         300
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "yakwetu-abandon-scan",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a11a-ykw02-webhook-scan",
+      "name": "Demo / Manual Scan",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        520
+      ],
+      "webhookId": "yakwetu-abandon-scan"
     },
     {
       "parameters": {
@@ -44,7 +61,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Suppress nudges 21:00–08:00 East Africa Time — defer instead of dropping\nconst now = new Date();\nconst eat = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));\nconst h = eat.getHours();\nif (h >= 21 || h < 8) {\n  console.log('Quiet hours in EAT — skipping run, sessions will be picked up next cycle');\n  return []; // next scheduled run re-selects them automatically\n}\nreturn $input.all();"
+        "jsCode": "// Suppress nudges 21:00\u201308:00 EAT unless demo/manual webhook scan\nlet force = false;\ntry { force = Boolean($('Demo / Manual Scan').isExecuted); } catch (e) { force = false; }\nif (force) return $input.all();\nconst now = new Date();\nconst eat = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));\nconst h = eat.getHours();\nif (h >= 21 || h < 8) {\n  console.log('Quiet hours in EAT \u2014 skipping run');\n  return [];\n}\nreturn $input.all();"
       },
       "id": "2c484a2a-9693-4543-aabb-2326f91c5bd0",
       "name": "Quiet Hours Gate (EAT)",
@@ -135,7 +152,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const s = $('Loop Over Items').item.json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu 🎬`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n🎬 Finish watching: ${link}` } }];"
+        "jsCode": "const s = $('Loop Over Items').item.json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu \ud83c\udfac`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst base = `${storefront}/checkout.html`;\nconst link = `${base}?resume=${s.session_id}&u=${encodeURIComponent(s.user_id)}&m=${encodeURIComponent(s.last_movie_id || '')}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n\ud83c\udfac Finish watching: ${link}` } }];"
       },
       "id": "22dd2c9c-8f4c-467f-90de-3432127a14ac",
       "name": "Build Message + Deep Link",
@@ -307,7 +324,13 @@
     },
     "Log Nudge": {
       "main": [
-        []
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send SMS (Africa's Talking)": {
@@ -315,6 +338,17 @@
         [
           {
             "node": "Log Nudge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo / Manual Scan": {
+      "main": [
+        [
+          {
+            "node": "Find Abandoned Sessions",
             "type": "main",
             "index": 0
           }

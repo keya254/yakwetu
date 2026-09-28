@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const b = $json.body || $json;\nconst required = ['event_type', 'user_id'];\nfor (const r of required) {\n  if (!b[r]) throw new Error(`Missing required field: ${r}`);\n}\nconst VALID = ['signup','browse','checkout_start','payment_failed','payment_success','watch_complete'];\nif (!VALID.includes(b.event_type)) throw new Error('Unknown event_type: ' + b.event_type);\n\nreturn [{ json: {\n  event_type: b.event_type,\n  user_id: String(b.user_id),\n  name: b.name || '',\n  phone: String(b.phone || '').replace(/\\s/g,''),\n  email: b.email || '',\n  session_id: b.session_id || ('sess_' + Date.now()),\n  movie_id: b.movie_id || null,\n  movie_title: b.movie_title || null,\n  genre: b.genre || null,\n  price_kes: b.price_kes || null,\n  failure_reason: b.failure_reason || null,\n  channel_pref: b.channel_pref || 'sms',\n  ts: b.ts || new Date().toISOString()\n}}];"
+        "jsCode": "const b = $json.body || $json;\nconst required = ['event_type', 'user_id'];\nfor (const r of required) {\n  if (!b[r]) throw new Error(`Missing required field: ${r}`);\n}\nconst VALID = ['signup','browse','checkout_start','payment_failed','payment_success','watch_complete','demo_abandon'];\nif (!VALID.includes(b.event_type)) throw new Error('Unknown event_type: ' + b.event_type);\n\nreturn [{ json: {\n  event_type: b.event_type,\n  user_id: String(b.user_id),\n  name: b.name || '',\n  phone: String(b.phone || '').replace(/\\s/g,''),\n  email: b.email || '',\n  session_id: b.session_id || ('sess_' + Date.now()),\n  movie_id: b.movie_id || null,\n  movie_title: b.movie_title || null,\n  genre: b.genre || null,\n  price_kes: b.price_kes || null,\n  failure_reason: b.failure_reason || null,\n  channel_pref: b.channel_pref || 'sms',\n  ts: b.ts || new Date().toISOString()\n}}];"
       },
       "id": "d4773697-1b41-48ba-ae06-3e68587104b3",
       "name": "Normalize & Validate",
@@ -71,7 +71,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO events (user_id, session_id, event_type, movie_id, movie_title, genre, price_kes, failure_reason, ts)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz);\nINSERT INTO sessions (session_id, user_id, state, last_activity, last_movie_id, last_movie_title, last_genre, last_price)\nVALUES ($2,$1,\n  CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE 'browsing' END,\n  NOW(), $4,$5,$6,$7)\nON CONFLICT (session_id) DO UPDATE SET\n  state = CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE sessions.state END,\n  last_activity = NOW(),\n  last_movie_id = COALESCE($4, sessions.last_movie_id),\n  last_movie_title = COALESCE($5, sessions.last_movie_title),\n  last_genre = COALESCE($6, sessions.last_genre),\n  last_price = COALESCE($7, sessions.last_price),\n  recovered = CASE WHEN $3='payment_success' THEN true ELSE sessions.recovered END\nRETURNING session_id;",
+        "query": "INSERT INTO events (user_id, session_id, event_type, movie_id, movie_title, genre, price_kes, failure_reason, ts)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz);\nINSERT INTO sessions (session_id, user_id, state, last_activity, last_movie_id, last_movie_title, last_genre, last_price)\nVALUES ($2,$1,\n  CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE 'browsing' END,\n  NOW(), $4,$5,$6,$7)\nON CONFLICT (session_id) DO UPDATE SET\n  state = CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE sessions.state END,\n  last_activity = NOW(),\n  last_movie_id = COALESCE($4, sessions.last_movie_id),\n  last_movie_title = COALESCE($5, sessions.last_movie_title),\n  last_genre = COALESCE($6, sessions.last_genre),\n  last_price = COALESCE($7, sessions.last_price),\n  recovered = CASE WHEN $3='payment_success' THEN true WHEN $3='demo_abandon' THEN false ELSE sessions.recovered END\nRETURNING session_id;",
         "options": {
           "queryReplacement": "={{ [$json.user_id, $json.session_id, $json.event_type, $json.movie_id, $json.movie_title, $json.genre, $json.price_kes, $json.failure_reason, $json.ts] }}"
         }
@@ -131,6 +131,29 @@
               },
               "renameOutput": true,
               "outputKey": "payment_success"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "r-demo-abandon",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "demo_abandon",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "demo_abandon"
             }
           ]
         },
@@ -145,6 +168,43 @@
       "position": [
         1400,
         300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE sessions\nSET last_activity = NOW() - INTERVAL '50 minutes',\n    recovered = false,\n    state = 'checkout',\n    nudge_count = 0,\n    last_nudge_at = NULL\nWHERE session_id = $1\nRETURNING session_id, user_id, state, last_activity, last_movie_title;",
+        "options": {
+          "queryReplacement": "={{ [$json.session_id] }}"
+        }
+      },
+      "id": "a11a0020-age-session-demo",
+      "name": "Age Session (demo idle)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1580,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: {\n  status: 'ok',\n  event: 'demo_abandon',\n  session_id: ev.session_id,\n  user_id: ev.user_id,\n  hint: 'No wait — last_activity backdated 50 min (already abandoned). Demo Lab triggers YKW-02 next.'\n}}];"
+      },
+      "id": "a11a0021-build-demo-abandon-ok",
+      "name": "Build Demo Abandon OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        420
       ]
     },
     {
@@ -371,7 +431,36 @@
         ],
         [
           {
+            "node": "Age Session (demo idle)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Age Session (demo idle)": {
+      "main": [
+        [
+          {
+            "node": "Build Demo Abandon OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Demo Abandon OK": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
             "type": "main",
             "index": 0
           }
