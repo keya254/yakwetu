@@ -16,7 +16,7 @@ re-engagement engine. Local stack lives at the **repo root** (`docker compose up
 ## Setup from repo root
 
 ```bash
-cp .env.example .env          # set AT_API_KEY at minimum
+cp .env.example .env          # set AT_USERNAME, AT_API_KEY, AT_SENDER_ID
 docker compose up -d
 ```
 
@@ -34,8 +34,8 @@ Deep links in messages use `STOREFRONT_URL` from `.env` (default `http://localho
 
 - [ ] Postgres credential on all Postgres nodes (`host` = `yakwetu-db` inside Compose)
 - [ ] OpenAI on AI nodes in YKW-02 / 03 / 04
-- [ ] Twilio WhatsApp sandbox joined; Twilio credential on WhatsApp send nodes
-- [ ] `AT_API_KEY` in `.env` for Africa's Talking SMS fallback / incentive
+- [ ] `OPENROUTER_API_KEY` on n8n (AI nodes call OpenRouter — no OpenAI credential)
+- [ ] `AT_USERNAME`, `AT_API_KEY`, `AT_SENDER_ID=AFTKNG` on n8n (SMS — header `apiKey` + form `username`/`from`)
 - [ ] SMTP credential on YKW-04 **Send Email Offer**
 - [ ] YKW-01 → YKW-03 and YKW-01 → YKW-04 workflow links set
 - [ ] Storefront webhook base saved
@@ -74,7 +74,7 @@ Deep links in messages use `STOREFRONT_URL` from `.env` (default `http://localho
 | Check | Expected |
 |-------|----------|
 | Browse on storefront | n8n YKW-01 execution; row in `events` |
-| Simulate payment fail | WhatsApp rescue text within seconds (Twilio sandbox) |
+| Simulate payment fail | SMS rescue within seconds (Africa's Talking, sender AFTKNG) |
 | Leave unrecovered 2h (or demo wait) | SMS with `PONA10` (Africa's Talking) |
 | Finish watching | Upsell email (SMTP), then WhatsApp reminder if no buy |
 

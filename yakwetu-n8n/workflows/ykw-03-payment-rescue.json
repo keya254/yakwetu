@@ -14,6 +14,36 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "yakwetu-payment-rescue",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a11a-ykw03-webhook",
+      "name": "Demo Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        520
+      ],
+      "webhookId": "yakwetu-payment-rescue"
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.body !== undefined ? $json.body : $json;\nif (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (e) { raw = $json; } }\nconst src = raw.body && typeof raw.body === 'object' ? { ...raw, ...raw.body } : raw;\nreturn [{ json: {\n  event_type: src.event_type || 'unknown',\n  user_id: String(src.user_id || ''),\n  name: src.name || '',\n  phone: String(src.phone || '').replace(/\\s/g,''),\n  email: src.email || '',\n  session_id: src.session_id || ('sess_' + Date.now()),\n  movie_id: src.movie_id || null,\n  movie_title: src.movie_title || null,\n  genre: src.genre || null,\n  price_kes: src.price_kes || null,\n  failure_reason: src.failure_reason || null,\n  channel_pref: src.channel_pref || 'sms',\n  ts: src.ts || new Date().toISOString()\n}}];"
+      },
+      "id": "a11a-ykw03-normalize",
+      "name": "Normalize Rescue Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "jsCode": "// Triage the Daraja-style failure reason into a recovery strategy\nconst reason = ($json.failure_reason || '').toLowerCase();\nlet klass = 'generic', strategy = 'retry_steps';\nif (reason.includes('insufficient') || reason.includes('balance')) { klass = 'insufficient_funds'; strategy = 'smaller_bundle'; }\nelse if (reason.includes('pin') || reason.includes('authorisation')) { klass = 'wrong_pin'; strategy = 'pin_help'; }\nelse if (reason.includes('timeout') || reason.includes('cancelled') || reason.includes('canceled')) { klass = 'timeout_or_cancel'; strategy = 'fresh_stk'; }\nelse if (reason.includes('limit')) { klass = 'limit_exceeded'; strategy = 'till_or_card'; }\nreturn [{ json: { ...$json, failure_class: klass, strategy } }];"
       },
       "id": "0991cb7e-8ca6-424b-b2ed-ea2d2cb98cdc",
@@ -27,48 +57,48 @@
     },
     {
       "parameters": {
-        "resource": "chat",
-        "operation": "message",
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list"
-        },
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/$/, '') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "role": "system",
-              "content": "You are Yakwetu support \u2014 a Kenyan movie streaming platform. A customer's M-Pesa payment just failed. Write a warm, reassuring WhatsApp message (max 350 chars) that (1) says no money was lost / any deduction reverses automatically, (2) gives the exact fix for their failure class, (3) keeps the movie they wanted front and center. Return JSON only: {\"message\": \"...\"}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
             },
             {
-              "role": "user",
-              "content": "=Customer {{ $json.name || 'viewer' }}, movie: {{ $json.movie_title }} (KES {{ $json.price_kes }}). Failure class: {{ $json.failure_class }}. Strategy: {{ $json.strategy }}. If strategy=smaller_bundle mention they can grab the 24-hour rental instead. If pin_help remind them to enter M-Pesa PIN on the phone prompt. If fresh_stk say we'll send a fresh prompt. If till_or_card suggest paying via card instead."
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'https://yakwetu.dontire.com' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu"
             }
           ]
         },
-        "jsonOutput": true,
-        "options": {
-          "temperature": 0.6
-        }
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.6, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"You are Yakwetu support \\u2014 a Kenyan movie streaming platform. A customer's M-Pesa payment just failed. Write a warm, reassuring SMS (max 320 chars) that (1) says no money was lost / any deduction reverses automatically, (2) gives the exact fix for their failure class, (3) keeps the movie they wanted front and center. Return JSON only: {\\\"message\\\": \\\"...\\\"}\" }, { role: 'user', content: ('Customer ' + ($json.name || 'viewer') + ', movie: ' + ($json.movie_title || '') + ' (KES ' + ($json.price_kes || '') + '). Failure class: ' + ($json.failure_class || '') + '. Strategy: ' + ($json.strategy || '') + '. If strategy=smaller_bundle mention they can grab the 24-hour rental instead. If pin_help remind them to enter M-Pesa PIN on the phone prompt. If fresh_stk say we will send a fresh prompt. If till_or_card suggest paying via card instead.') } ] }) }}",
+        "options": {}
       },
       "id": "cfa1d331-90ef-4a2a-898d-82fa6e20e19a",
       "name": "AI: Troubleshooting Copy",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1.8,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         680,
         300
       ],
-      "credentials": {
-        "openAiApi": {
-          "id": "2",
-          "name": "OpenAI account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "let ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: 'Pole! Your payment did not go through \u2014 no money was lost. Want us to send a fresh M-Pesa prompt?' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?resume=${$json.session_id}&retry=1`;\nreturn [{ json: { ...$('Classify Failure').first().json, ai_message: ai.message,\n  full_message: `${ai.message}\\n\\n\u25b6\ufe0f Resume payment: ${link}` } }];"
+        "jsCode": "const atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: 'Pole! Your payment did not go through \u2014 no money was lost. Want us to send a fresh M-Pesa prompt?' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'https://yakwetu.dontire.com').replace(/\\/$/, '');\nconst mid = encodeURIComponent(($json.movie_id || $('Classify Failure').first().json.movie_id || 'nairobi-half-life'));\nconst link = `${storefront}/checkout/${mid}?resume=${$json.session_id}&retry=1`;\nreturn [{ json: { ...$('Classify Failure').first().json, ai_message: ai.message,\n  full_message: `${ai.message}\\n\\n\u25b6\ufe0f Resume payment: ${link}` } }];"
       },
       "id": "a2f485a7-fd9a-4b23-8042-a68a6a221fd8",
       "name": "Build Rescue Message",
@@ -81,32 +111,64 @@
     },
     {
       "parameters": {
-        "resource": "message",
-        "operation": "send",
-        "from": "whatsapp:+14155238886",
-        "to": "=whatsapp:{{ $json.phone }}",
-        "message": "={{ $json.full_message }}",
+        "method": "POST",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $env.AT_USERNAME }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.full_message }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "503c0282-22b6-496e-82cb-b66bb5258295",
-      "name": "Instant WhatsApp",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 2,
+      "name": "Instant SMS (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1120,
         300
       ],
-      "credentials": {
-        "twilioApi": {
-          "id": "3",
-          "name": "Twilio account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'payment_failed','whatsapp',$3,NOW());\nINSERT INTO dropoffs (user_id, session_id, movie_id, failure_class, ts)\nVALUES ($1,$2,$4,$5,NOW());",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'payment_failed','sms',$3,NOW());\nINSERT INTO dropoffs (user_id, session_id, movie_id, failure_class, ts)\nVALUES ($1,$2,$4,$5,NOW());",
         "options": {
           "queryReplacement": "={{ [$json.user_id, $json.session_id, $json.full_message, $json.movie_id, $json.failure_class] }}"
         }
@@ -124,15 +186,16 @@
           "id": "1",
           "name": "Yakwetu Postgres"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "amount": 2,
-        "unit": "hours"
+        "unit": "minutes"
       },
       "id": "28504911-1127-4b93-a3d8-31a2ae0ebdc8",
-      "name": "Wait 2 Hours",
+      "name": "Wait 2 Minutes (demo)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
@@ -196,7 +259,8 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.sandbox.africastalking.com/version1/messaging",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -205,8 +269,8 @@
               "value": "={{ $env.AT_API_KEY }}"
             },
             {
-              "name": "Content-Type",
-              "value": "application/x-www-form-urlencoded"
+              "name": "Accept",
+              "value": "application/json"
             }
           ]
         },
@@ -216,7 +280,7 @@
           "parameters": [
             {
               "name": "username",
-              "value": "sandbox"
+              "value": "={{ $env.AT_USERNAME }}"
             },
             {
               "name": "to",
@@ -224,11 +288,15 @@
             },
             {
               "name": "message",
-              "value": "=Still want {{ $('Classify Failure').first().json.movie_title }}? Use code PONA10 for 10% off \u2014 valid tonight only \ud83c\udfac {{ $env.STOREFRONT_URL }}/checkout.html?resume={{ $('Classify Failure').first().json.session_id }}"
+              "value": "=Still want {{ $('Classify Failure').first().json.movie_title }}? Use code PONA10 for 10% off \u2014 valid tonight only \ud83c\udfac {{ $env.STOREFRONT_URL }}/checkout/{{ $('Classify Failure').first().json.movie_id || 'nairobi-half-life' }}?resume={{ $('Classify Failure').first().json.session_id }}"
             },
             {
               "name": "from",
-              "value": "YAKWETU"
+              "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
             }
           ]
         },
@@ -241,7 +309,8 @@
       "position": [
         2220,
         220
-      ]
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -272,7 +341,7 @@
       "main": [
         [
           {
-            "node": "Classify Failure",
+            "node": "Normalize Rescue Input",
             "type": "main",
             "index": 0
           }
@@ -305,14 +374,14 @@
       "main": [
         [
           {
-            "node": "Instant WhatsApp",
+            "node": "Instant SMS (Africa's Talking)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Instant WhatsApp": {
+    "Instant SMS (Africa's Talking)": {
       "main": [
         [
           {
@@ -327,14 +396,14 @@
       "main": [
         [
           {
-            "node": "Wait 2 Hours",
+            "node": "Wait 2 Minutes (demo)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait 2 Hours": {
+    "Wait 2 Minutes (demo)": {
       "main": [
         [
           {
@@ -378,9 +447,31 @@
           }
         ]
       ]
+    },
+    "Demo Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Rescue Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Rescue Input": {
+      "main": [
+        [
+          {
+            "node": "Classify Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1"
   },

@@ -1,5 +1,5 @@
 {
-  "name": "YKW 04 \u2014 Post-Watch Personalized Upsell",
+  "name": "YKW 04 \u2014 Post-Watch Upsell (SMS)",
   "nodes": [
     {
       "parameters": {},
@@ -14,24 +14,55 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "yakwetu-watch-upsell",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a11a-ykw04-webhook",
+      "name": "Demo Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        520
+      ],
+      "webhookId": "yakwetu-watch-upsell"
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.body !== undefined ? $json.body : $json;\nif (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (e) { raw = $json; } }\nconst src = raw.body && typeof raw.body === 'object' ? { ...raw, ...raw.body } : raw;\nreturn [{ json: {\n  event_type: src.event_type || 'unknown',\n  user_id: String(src.user_id || ''),\n  name: src.name || '',\n  phone: String(src.phone || '').replace(/\\s/g,''),\n  email: src.email || '',\n  session_id: src.session_id || ('sess_' + Date.now()),\n  movie_id: src.movie_id || null,\n  movie_title: src.movie_title || null,\n  genre: src.genre || null,\n  price_kes: src.price_kes || null,\n  failure_reason: src.failure_reason || null,\n  channel_pref: src.channel_pref || 'sms',\n  ts: src.ts || new Date().toISOString()\n}}];"
+      },
+      "id": "a11a-ykw04-normalize",
+      "name": "Normalize Upsell Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "amount": 1,
-        "unit": "hours"
+        "unit": "minutes"
       },
       "id": "a9994068-007e-4dec-b69e-0bd0a78066f5",
-      "name": "Wait After Credits",
+      "name": "Wait 1 Minute After Credits",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
         460,
         300
-      ]
+      ],
+      "webhookId": "5d31684f-a859-42af-b900-362ee4989ce9"
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT e.movie_title, e.genre, e.price_kes\nFROM events e\nWHERE e.user_id = $1 AND e.event_type IN ('watch_complete','payment_success')\nORDER BY e.ts DESC LIMIT 6;",
         "options": {
-          "queryReplacement": "={{ [$json.user_id] }}"
+          "queryReplacement": "={{ [$('Normalize Upsell Input').first().json.user_id] }}"
         }
       },
       "id": "982866c2-a418-427c-b5ab-f86177de4a0f",
@@ -51,48 +82,48 @@
     },
     {
       "parameters": {
-        "resource": "chat",
-        "operation": "message",
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list"
-        },
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/$/, '') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "role": "system",
-              "content": "You are Yakwetu, a Kenyan African-movie streaming platform. A viewer just finished a movie. Curate a 2\u20133 title bundle in the SAME vibe from this catalog: Nairobi Nights (crime drama, KES 150), Sauti ya Mtaa (music drama, KES 120), The Matatu Diaries (comedy, KES 100), Kifaru (wildlife doc, KES 130), Dhahabu (romance, KES 110), Wazi (thriller, KES 140). Offer the bundle at ~20% off. Write an email-style upsell: subject line + 3 short lines + CTA. Return JSON only: {\"subject\": \"...\", \"body\": \"...\", \"bundle_titles\": \"...\", \"bundle_price\": \"...\"}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
             },
             {
-              "role": "user",
-              "content": "=Viewer {{ $('When Called by Intake').item.json.name || 'fan' }} just finished: {{ $('When Called by Intake').item.json.movie_title }} ({{ $('When Called by Intake').item.json.genre }}). Recent history: {{ $json.taste || 'same genre' }}. Make the bundle feel hand-picked, expiring in 48 hours."
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'https://yakwetu.dontire.com' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu"
             }
           ]
         },
-        "jsonOutput": true,
-        "options": {
-          "temperature": 0.8
-        }
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.8, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"You are Yakwetu, a Kenyan movie streaming platform. A viewer just finished a movie. Curate a 2-3 title bundle in a SIMILAR vibe from this catalog only: Nairobi Half Life (Crime Drama, KES 150); Nairobi Nights (Crime Drama, KES 150); 40 Sticks (Crime Thriller, KES 140); Click Click Bang (Crime Thriller, KES 145); Mission to Rescue (Action Thriller, KES 145); Chokora (Crime Drama, KES 110); Disconnect (Thriller, KES 130); Katana (Coastal Thriller, KES 140); Wazi (Psych Thriller, KES 140); Veve (Crime Drama, KES 125); Rafiki (Romance Drama, KES 140); Something Necessary (Drama, KES 120); From a Whisper (Drama, KES 120); The Rugged Priest (Drama, KES 115); Stories of Our Lives (Drama, KES 110); Togetherness Supreme (Drama, KES 110); The First Grader (Drama, KES 125); Kati Kati (Drama, KES 130); Baraka ya Bibi (Family Drama, KES 115); Sauti ya Mtaa (Music Drama, KES 120); Dangerous Affair (Romance Drama, KES 100); The Letter (Drama, KES 120); Our Strength (Drama, KES 105); The Wall Street Boy (Drama, KES 135); 18 Hours (Medical Thriller, KES 135); House of Lungula (Comedy Thriller, KES 110); Shattered (Thriller, KES 115); Poacher (Eco Thriller, KES 130); Grave Yard (Horror, KES 105); Through Hell (Horror, KES 105); The Hammer (Action, KES 110); Game of Wits (Thriller, KES 120); The Matatu Diaries (Comedy, KES 100); Malooned (Comedy, KES 100); Toto Millionaire (Family Comedy, KES 95); Fundi-Mentals (Comedy, KES 95); MONO (Comedy Drama, KES 125); Dhahabu (Romance, KES 110); Sa\\u00efkati (Romance Adventure, KES 100); The Dance for Wives (Romance Drama, KES 100); Pumzi (Sci-Fi, KES 120); Volume (Drama Series, KES 160); Kifaru (Wildlife Doc, KES 130); Balloon Safari (Wildlife Doc, KES 90); Mzima: Portrait of a Spring (Nature Doc, KES 90); Kibera Kid (Short Drama, KES 80); Intellectual Scum (Satire, KES 95); I Want to Be a Pilot (Short Drama, KES 80); Shuga (Drama, KES 100); Haba na Haba (Drama, KES 105); Nangos (Drama, KES 100); The Stigma (Drama, KES 100). Offer ~20% off. Write a short SMS (max 280 chars) with hook + bundle + CTA. Return JSON only: {\\\"message\\\":\\\"...\\\",\\\"bundle_titles\\\":\\\"...\\\",\\\"bundle_price\\\":\\\"...\\\"}\" }, { role: 'user', content: ('Viewer ' + ($('Normalize Upsell Input').item.json.name || 'fan') + ' just finished: ' + ($('Normalize Upsell Input').item.json.movie_title || '') + ' (' + ($('Normalize Upsell Input').item.json.genre || '') + '). Pick similar titles from the catalog.') } ] }) }}",
+        "options": {}
       },
       "id": "49e05e07-d172-4086-8204-e28e68f76005",
       "name": "AI: Build Bundle Offer",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1.8,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         900,
         300
       ],
-      "credentials": {
-        "openAiApi": {
-          "id": "2",
-          "name": "OpenAI account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "let ai;\ntry { ai = JSON.parse($json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { subject: 'More stories you will love \ud83c\udfac', body: 'Hand-picked for you \u2014 20% off this weekend.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?bundle=1&u=${encodeURIComponent($('When Called by Intake').item.json.user_id)}`;\nreturn [{ json: { ...$('When Called by Intake').item.json, ...ai, offer_link: link } }];"
+        "jsCode": "const atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nconst ev = $('Normalize Upsell Input').first().json;\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: 'Loved that ending? Grab a hand-picked bundle at 20% off \u2014 tonight only.', bundle_titles: 'Nairobi Nights + Sauti ya Mtaa', bundle_price: 'KES 215' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'https://yakwetu.dontire.com').replace(/\\/$/, '');\nconst link = `${storefront}/?bundle=1&u=${encodeURIComponent(ev.user_id)}`;\nconst msg = (ai.message || 'More stories for you on Yakwetu').trim();\nconst full_message = `${msg}\\n\\n\ud83c\udfac ${ai.bundle_titles || 'Bundle'} (${ai.bundle_price || ''})\\nGrab it: ${link}`;\nreturn [{ json: {\n  ...ev,\n  bundle_titles: ai.bundle_titles || 'Nairobi Nights + Sauti ya Mtaa',\n  bundle_price: ai.bundle_price || 'KES 215',\n  offer_link: link,\n  full_message\n}}];"
       },
       "id": "0e6d694f-cf16-49ca-bdc3-d881b201fdfd",
       "name": "Build Offer",
@@ -105,48 +136,81 @@
     },
     {
       "parameters": {
-        "fromEmail": "watch@yakwetu.co.ke",
-        "toEmail": "={{ $json.email }}",
-        "subject": "={{ $json.subject }}",
-        "emailFormat": "html",
-        "html": "=<div style='font-family:Arial;background:#0e0e14;color:#f5f0e6;padding:32px;border-radius:12px'><h2 style='color:#e8b54a'>{{ $json.subject }}</h2><p>{{ $json.body }}</p><p><b>{{ $json.bundle_titles }}</b> \u2014 <span style='color:#e8b54a'>{{ $json.bundle_price }}</span></p><a href='{{ $json.offer_link }}' style='background:#e8b54a;color:#0e0e14;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold'>Grab the bundle</a><p style='opacity:.6;font-size:12px'>Offer expires in 48 hours \u00b7 Yakwetu</p></div>",
+        "method": "POST",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $env.AT_USERNAME }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $('Build Offer').item.json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $('Build Offer').item.json.full_message }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
         "options": {}
       },
-      "id": "572c486d-c2a0-4585-9586-29a2d8854043",
-      "name": "Send Email Offer",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "id": "a11a-ykw04-send-upsell-sms",
+      "name": "Send Upsell SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1340,
         300
       ],
-      "credentials": {
-        "smtp": {
-          "id": "5",
-          "name": "SMTP account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "amount": 24,
-        "unit": "hours"
+        "amount": 1,
+        "unit": "minutes"
       },
       "id": "eda76322-c397-4fa5-a57f-faf29c483510",
-      "name": "Wait 24h",
+      "name": "Wait 1 Minute (demo)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
         1560,
         300
-      ]
+      ],
+      "webhookId": "969597b0-c9a5-4974-9ab3-2b7087991dda"
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT COUNT(*)::int AS buys FROM events\nWHERE user_id = $1 AND event_type = 'payment_success' AND ts > NOW() - INTERVAL '24 hours';",
         "options": {
-          "queryReplacement": "={{ [$('When Called by Intake').item.json.user_id] }}"
+          "queryReplacement": "={{ [$('Normalize Upsell Input').item.json.user_id] }}"
         }
       },
       "id": "723b764a-66f6-414f-825b-9b0eaabadc9d",
@@ -196,34 +260,66 @@
     },
     {
       "parameters": {
-        "resource": "message",
-        "operation": "send",
-        "from": "whatsapp:+14155238886",
-        "to": "=whatsapp:{{ $('When Called by Intake').item.json.phone }}",
-        "message": "=Last call \ud83c\udfac Your {{ $('Build Offer').item.json.bundle_titles }} bundle ({{ $('Build Offer').item.json.bundle_price }}) expires tonight: {{ $('Build Offer').item.json.offer_link }}",
+        "method": "POST",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $env.AT_USERNAME }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $('Normalize Upsell Input').item.json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "=Last call \ud83c\udfac Your {{ $('Build Offer').item.json.bundle_titles }} bundle ({{ $('Build Offer').item.json.bundle_price }}) expires tonight: {{ $('Build Offer').item.json.offer_link }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "27f1d62c-efb5-4f77-922d-0d4b24706412",
-      "name": "WhatsApp Reminder",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 2,
+      "name": "SMS Reminder (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         2220,
         220
       ],
-      "credentials": {
-        "twilioApi": {
-          "id": "3",
-          "name": "Twilio account"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'post_watch_upsell','email+whatsapp',$3,NOW());",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'post_watch_upsell','sms',$3,NOW());",
         "options": {
-          "queryReplacement": "={{ [$('When Called by Intake').item.json.user_id, $('When Called by Intake').item.json.session_id, $('Build Offer').item.json.subject] }}"
+          "queryReplacement": "={{ [$('Normalize Upsell Input').item.json.user_id, $('Normalize Upsell Input').item.json.session_id, $('Build Offer').item.json.full_message] }}"
         }
       },
       "id": "d73babdb-db2a-42ad-bae7-b719d33caf50",
@@ -247,14 +343,14 @@
       "main": [
         [
           {
-            "node": "Wait After Credits",
+            "node": "Normalize Upsell Input",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait After Credits": {
+    "Wait 1 Minute After Credits": {
       "main": [
         [
           {
@@ -291,25 +387,14 @@
       "main": [
         [
           {
-            "node": "Send Email Offer",
+            "node": "Send Upsell SMS",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send Email Offer": {
-      "main": [
-        [
-          {
-            "node": "Wait 24h",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait 24h": {
+    "Wait 1 Minute (demo)": {
       "main": [
         [
           {
@@ -335,7 +420,7 @@
       "main": [
         [
           {
-            "node": "WhatsApp Reminder",
+            "node": "SMS Reminder (Africa's Talking)",
             "type": "main",
             "index": 0
           }
@@ -349,7 +434,7 @@
         ]
       ]
     },
-    "WhatsApp Reminder": {
+    "SMS Reminder (Africa's Talking)": {
       "main": [
         [
           {
@@ -359,9 +444,42 @@
           }
         ]
       ]
+    },
+    "Demo Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Upsell Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Upsell Input": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 Minute After Credits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Upsell SMS": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 Minute (demo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1"
   },

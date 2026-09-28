@@ -24,7 +24,8 @@ Set at least:
 - `POSTGRES_PASSWORD` (**change from default** — DB is publishable externally)
 - `POSTGRES_PUBLISH_PORT` (default `15432` — host port for external Postgres clients)
 - `PAYSTACK_PUBLIC_KEY` / `PAYSTACK_SECRET_KEY`
-- `AT_API_KEY` (if using SMS)
+- `OPENROUTER_API_KEY` (AI copy via OpenRouter; optional `OPENROUTER_MODEL`)
+- `AT_USERNAME` / `AT_API_KEY` / `AT_SENDER_ID=AFTKNG` (SMS: header `apiKey`, form `username` + `from`)
 - Defaults already match the domain: `STOREFRONT_URL`, `WEBHOOK_URL`, `N8N_HOST`
 
 **External Postgres** (TablePlus / `psql` / Metabase):
@@ -77,10 +78,12 @@ See [`yakwetu-n8n/README.md`](yakwetu-n8n/README.md) and [`yakwetu-n8n/verify.sq
 ## Layout
 
 ```
-app/                     Storefront HTML (baked into yakwetu-storefront image)
+storefront/              React + Vite SPA (Home, Movie, Checkout, Watch, Login)
+  public/admin.html      Admin dashboard
+  public/demo-lab.html   SMS / workflow demo tools
 deploy/
-  Dockerfile.storefront
-  nginx-storefront.conf  # proxies /api → yakwetu-paystack-api
+  Dockerfile.storefront  # builds storefront → nginx
+  nginx-storefront.conf  # SPA + /api → yakwetu-paystack-api
 services/paystack-api/
 yakwetu-n8n/             schema + workflows
 docker-compose.yml       Dokploy / production

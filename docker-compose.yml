@@ -5,10 +5,11 @@
 # with published ports, use docker-compose.dev.yml instead.
 #
 # Stack:
-#   yakwetu-storefront  → https://yakwetu.dontire.com       (nginx + app/ + /api proxy)
+#   yakwetu-storefront  → https://yakwetu.dontire.com       (React SPA + /api proxy)
 #   yakwetu-n8n         → https://n8n.yakwetu.dontire.com   (workflows + webhooks)
 #   yakwetu-paystack-api → internal only (reached via storefront /api/*)
 #   yakwetu-db          → Postgres 16 (n8n metadata + app tables)
+#   yakwetu-seed        → oneshot: re-applies seed-demo.sql after DB is healthy
 #
 # Service names are prefixed yakwetu- — dokploy-network is shared across every
 # app on this server. Bare names like "n8n" or "postgres" can collide with
@@ -36,6 +37,7 @@ services:
       - dokploy-network
     depends_on:
       - yakwetu-paystack-api
+      - yakwetu-n8n
 
   yakwetu-paystack-api:
     build:
@@ -51,22 +53,37 @@ services:
       - PAYSTACK_SECRET_KEY
       - PAYSTACK_WEBHOOK_SECRET
       - PAYSTACK_CURRENCY=${PAYSTACK_CURRENCY:-KES}
-      # Internal DNS on dokploy-network — do not point this at the public URL
       - N8N_EVENT_WEBHOOK=${N8N_EVENT_WEBHOOK:-http://yakwetu-n8n:5678/webhook/yakwetu-event}
+      - AT_API_KEY
+      - AT_USERNAME
+      - AT_SENDER_ID=${AT_SENDER_ID:-AFTKNG}
+      - AT_API_URL=${AT_API_URL:-https://api.africastalking.com/version1/messaging}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-yakwetu-admin}
+      - ADMIN_PHONE=${ADMIN_PHONE:-+254702846542}
+      - TMDB_API_KEY
+      - OMDB_API_KEY
+      - POSTGRES_HOST=yakwetu-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-yakwetu}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yakwetu}
+      - POSTGRES_DB=${POSTGRES_DB:-yakwetu}
     networks:
       - dokploy-network
     depends_on:
-      - yakwetu-n8n
+      yakwetu-db:
+        condition: service_healthy
+      yakwetu-n8n:
+        condition: service_started
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3001/api/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 5
       start_period: 20s
 
@@ -88,11 +105,23 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
       - WEBHOOK_URL=${WEBHOOK_URL:-https://n8n.yakwetu.dontire.com/}
+      # Required behind Dokploy/Traefik — stops "Lost connection to the server"
+      - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL:-https://n8n.yakwetu.dontire.com/}
+      - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-1}
+      # SSE is more reliable than websocket through many Traefik setups
+      - N8N_PUSH_BACKEND=${N8N_PUSH_BACKEND:-sse}
       - GENERIC_TIMEZONE=Africa/Nairobi
       - TZ=Africa/Nairobi
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - EXECUTIONS_TIMEOUT=${EXECUTIONS_TIMEOUT:-3600}
+      - EXECUTIONS_TIMEOUT_MAX=${EXECUTIONS_TIMEOUT_MAX:-7200}
+      - OPENROUTER_API_KEY
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
       - AT_API_KEY
-      - AT_USERNAME=${AT_USERNAME:-sandbox}
+      - AT_USERNAME
+      - AT_SENDER_ID=${AT_SENDER_ID:-AFTKNG}
+      - AT_API_URL=${AT_API_URL:-https://api.africastalking.com/version1/messaging}
       - STOREFRONT_URL=${STOREFRONT_URL:-https://yakwetu.dontire.com}
     volumes:
       - yakwetu_n8n_data:/home/node/.n8n
@@ -101,6 +130,12 @@ services:
     depends_on:
       yakwetu-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   yakwetu-db:
     image: postgres:16-alpine
@@ -122,6 +157,7 @@ services:
     volumes:
       - yakwetu_db_data:/var/lib/postgresql/data
       - ./yakwetu-n8n/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./yakwetu-n8n/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -130,6 +166,31 @@ services:
       start_period: 20s
     networks:
       - dokploy-network
+
+  # Re-applies demo users/sessions on every deploy (idempotent — deletes demo_* then inserts).
+  # initdb.d only runs on first empty volume; this oneshot covers redeploys.
+  yakwetu-seed:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:-yakwetu}
+      - POSTGRES_USER=${POSTGRES_USER:-yakwetu}
+      - POSTGRES_DB=${POSTGRES_DB:-yakwetu}
+    volumes:
+      - ./yakwetu-n8n/seed-demo.sql:/seed-demo.sql:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "Yakwetu: applying demo seed…"
+        psql -h yakwetu-db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /seed-demo.sql
+        echo "Yakwetu: demo seed OK"
+    networks:
+      - dokploy-network
+    depends_on:
+      yakwetu-db:
+        condition: service_healthy
+
 volumes:
   yakwetu_db_data:
   yakwetu_n8n_data:

@@ -14,11 +14,32 @@ services:
     volumes:
       - yakwetu_db_data:/var/lib/postgresql/data
       - ./yakwetu-n8n/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./yakwetu-n8n/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 12
+
+  yakwetu-seed:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-yakwetu}
+      POSTGRES_USER: ${POSTGRES_USER:-yakwetu}
+      POSTGRES_DB: ${POSTGRES_DB:-yakwetu}
+    volumes:
+      - ./yakwetu-n8n/seed-demo.sql:/seed-demo.sql:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "Yakwetu: applying demo seed…"
+        psql -h yakwetu-db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /seed-demo.sql
+        echo "Yakwetu: demo seed OK"
+    depends_on:
+      yakwetu-db:
+        condition: service_healthy
 
   yakwetu-n8n:
     image: n8nio/n8n:latest
@@ -36,12 +57,21 @@ services:
       N8N_HOST: ${N8N_HOST:-localhost}
       N8N_PORT: 5678
       N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
-      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+      # Local editor usually fine without these; keep for parity with Dokploy
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5678/}
+      N8N_PROXY_HOPS: ${N8N_PROXY_HOPS:-0}
+      N8N_PUSH_BACKEND: ${N8N_PUSH_BACKEND:-websocket}
       GENERIC_TIMEZONE: Africa/Nairobi
       TZ: Africa/Nairobi
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
       AT_API_KEY: ${AT_API_KEY:-}
-      AT_USERNAME: ${AT_USERNAME:-sandbox}
+      AT_USERNAME: ${AT_USERNAME:-}
+      AT_SENDER_ID: ${AT_SENDER_ID:-AFTKNG}
+      AT_API_URL: ${AT_API_URL:-https://api.africastalking.com/version1/messaging}
       STOREFRONT_URL: ${STOREFRONT_URL:-http://localhost:8080}
     volumes:
       - yakwetu_n8n_data:/home/node/.n8n
@@ -57,9 +87,7 @@ services:
     restart: unless-stopped
     ports:
       - "${STOREFRONT_PORT:-8080}:80"
-    # Live-edit HTML without rebuild (prod image still bakes app/ in)
     volumes:
-      - ./app:/usr/share/nginx/html:ro
       - ./deploy/nginx-storefront.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - yakwetu-paystack-api
@@ -79,8 +107,22 @@ services:
       PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET:-}
       PAYSTACK_CURRENCY: ${PAYSTACK_CURRENCY:-KES}
       N8N_EVENT_WEBHOOK: ${N8N_EVENT_WEBHOOK:-http://yakwetu-n8n:5678/webhook/yakwetu-event}
+      AT_API_KEY: ${AT_API_KEY:-}
+      AT_USERNAME: ${AT_USERNAME:-}
+      AT_SENDER_ID: ${AT_SENDER_ID:-AFTKNG}
+      AT_API_URL: ${AT_API_URL:-https://api.africastalking.com/version1/messaging}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-yakwetu-admin}
+      ADMIN_PHONE: ${ADMIN_PHONE:-+254702846542}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      OMDB_API_KEY: ${OMDB_API_KEY:-}
+      POSTGRES_HOST: yakwetu-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-yakwetu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yakwetu}
+      POSTGRES_DB: ${POSTGRES_DB:-yakwetu}
     depends_on:
       - yakwetu-n8n
+      - yakwetu-db
 
 volumes:
   yakwetu_db_data:
