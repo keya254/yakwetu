@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Everything here lives in the `storefront` schema (see DATABASE_URL). The same
+// Postgres holds n8n's tables in `public` and the recommender's in `recs`;
+// this app never touches either.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth — better-auth's required shape. Field names are fixed by the adapter;
+// only @@map, @@index and additionalFields (phone) are ours.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id
+  name          String
+  email         String
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  /// E.164 (+2547…). Where n8n sends SMS nudges through Africa's Talking.
+  phone String?
+
+  sessions Session[]
+  accounts Account[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Catalog — OMDb metadata cached locally, so pages never wait on (or burn the
+// daily quota of) the OMDb API. Filled by `pnpm catalog:seed`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Movie {
+  /// Our slug, e.g. `nairobi-half-life`. Shared with sinema-recs for overlapping titles.
+  id         String   @id
+  imdbId     String?  @unique
+  title      String
+  year       Int?
+  /// "Drama, Thriller" from OMDb, split and lowercased.
+  genres     String[] @default([])
+  languages  String[] @default([])
+  countries  String[] @default([])
+  plot       String   @default("")
+  director   String?
+  actors     String[] @default([])
+  runtimeMin Int?
+  rated      String?
+  imdbRating Float?
+  posterUrl  String?
+
+  priceKes     Int     @default(99)
+  isNewRelease Boolean @default(false)
+  /// Lower is hotter. Curated for now; later derived from recent events.
+  trendingRank Int?
+  /// Kenyan titles get their own row on the landing page.
+  featured     Boolean @default(false)
+
+  omdbFetchedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([trendingRank])
+  @@map("movie")
+}
