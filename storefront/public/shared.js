@@ -52,15 +52,15 @@ function logout() {
   localStorage.removeItem(AUTH_KEY);
   localStorage.removeItem('ykw_session');
   USER = null;
-  location.href = 'login.html';
+  location.href = '/login';
 }
 
-/** Redirect to login unless on login.html / demo-lab.html */
+/** Redirect to login unless on login / admin / demo-lab */
 function requireAuth() {
   const page = (location.pathname.split('/').pop() || '').toLowerCase();
-  if (page === 'login.html' || page === 'admin.html') return;
+  if (page === 'login.html' || page === 'admin.html' || page === 'demo-lab.html' || page === 'login') return;
   if (!isLoggedIn()) {
-    location.href = 'login.html?next=' + encodeURIComponent(page || 'index.html');
+    location.href = '/login?next=' + encodeURIComponent(location.pathname || '/');
   }
 }
 

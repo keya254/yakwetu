@@ -54,7 +54,7 @@
       <span class="msg" id="who"></span>
       <button class="ghost" type="button" onclick="refresh()">Refresh</button>
       <button class="ghost" type="button" onclick="logoutAdmin()">Lock</button>
-      <a href="index.html">← Storefront</a>
+      <a href="/">← Storefront</a>
     </div>
     <div class="grid" id="stats"></div>
     <div class="panels">
@@ -223,8 +223,8 @@ function renderFollowups(rows){
   }
   host.innerHTML = rows.map((r, i) => {
     const defaultMsg = r.state === 'failed'
-      ? `Hi ${(r.name||'').split(' ')[0]||'there'} — your payment for ${r.last_movie_title||'your movie'} didn’t go through. No money was lost. Retry: https://yakwetu.dontire.com/checkout.html?resume=${r.session_id}`
-      : `Hi ${(r.name||'').split(' ')[0]||'there'} — ${r.last_movie_title||'your movie'} is still waiting on Yakwetu. Finish checkout: https://yakwetu.dontire.com/checkout.html?resume=${r.session_id}`;
+      ? `Hi ${(r.name||'').split(' ')[0]||'there'} — your payment for ${r.last_movie_title||'your movie'} didn’t go through. No money was lost. Retry: https://yakwetu.dontire.com/checkout/${encodeURIComponent(r.last_movie_id||'nairobi-half-life')}?resume=${r.session_id}`
+      : `Hi ${(r.name||'').split(' ')[0]||'there'} — ${r.last_movie_title||'your movie'} is still waiting on Yakwetu. Finish checkout: https://yakwetu.dontire.com/checkout/${encodeURIComponent(r.last_movie_id||'nairobi-half-life')}?resume=${r.session_id}`;
     return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px">
       <div><b>${esc(r.name||r.user_id)}</b> · ${esc(r.phone)} · <span class="tag warn">${esc(r.state)}</span></div>
       <div class="msg">${esc(r.last_movie_title||'—')} · idle ${esc(r.idle_minutes)} min · nudges ${esc(r.nudge_count)}</div>

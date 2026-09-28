@@ -707,12 +707,21 @@ const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 const OMDB_API_KEY = process.env.OMDB_API_KEY || '';
 const posterCache = new Map(); // id → poster url
 
-async function fetchJson(url, headers = {}) {
-  const r = await fetch(url, {
-    headers: { 'User-Agent': 'YakwetuCatalog/1.0', ...headers },
-  });
-  if (!r.ok) return null;
-  return r.json();
+async function fetchJson(url, headers = {}, timeoutMs = 3500) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'YakwetuCatalog/1.0', ...headers },
+      signal: ctrl.signal,
+    });
+    if (!r.ok) return null;
+    return r.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 async function enrichOne(item) {
@@ -774,8 +783,8 @@ async function enrichOne(item) {
     }
   }
 
-  // 3) Wikipedia page image (no key)
-  if (item.title) {
+  // 3) Wikipedia only when no TMDB/OMDb keys (slow path)
+  if (!TMDB_API_KEY && !OMDB_API_KEY && item.title) {
     try {
       const titles = [
         item.title,
@@ -785,7 +794,9 @@ async function enrichOne(item) {
       for (const t of titles) {
         const q = encodeURIComponent(t);
         const d = await fetchJson(
-          `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=thumbnail&pithumbsize=500&titles=${q}&origin=*`
+          `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=thumbnail&pithumbsize=500&titles=${q}&origin=*`,
+          {},
+          2500
         );
         const pages = (d && d.query && d.query.pages) || {};
         for (const p of Object.values(pages)) {
@@ -816,12 +827,11 @@ app.get('/api/catalog/config', (_req, res) => {
 app.post('/api/catalog/enrich', async (req, res) => {
   try {
     const titles = Array.isArray(req.body && req.body.titles)
-      ? req.body.titles.slice(0, 40)
+      ? req.body.titles.slice(0, 12)
       : [];
     const posters = {};
-    // sequential-ish batches to stay polite to free APIs
-    for (let i = 0; i < titles.length; i += 4) {
-      const batch = titles.slice(i, i + 4);
+    for (let i = 0; i < titles.length; i += 6) {
+      const batch = titles.slice(i, i + 6);
       const results = await Promise.all(batch.map((t) => enrichOne(t)));
       batch.forEach((t, idx) => {
         if (results[idx]) posters[t.id] = results[idx];
@@ -832,7 +842,7 @@ app.post('/api/catalog/enrich', async (req, res) => {
       sources: {
         tmdb: Boolean(TMDB_API_KEY),
         omdb: Boolean(OMDB_API_KEY),
-        wikipedia: true,
+        wikipedia: !TMDB_API_KEY && !OMDB_API_KEY,
       },
     });
   } catch (e) {

@@ -87,9 +87,7 @@ services:
     restart: unless-stopped
     ports:
       - "${STOREFRONT_PORT:-8080}:80"
-    # Live-edit HTML without rebuild (prod image still bakes app/ in)
     volumes:
-      - ./app:/usr/share/nginx/html:ro
       - ./deploy/nginx-storefront.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - yakwetu-paystack-api

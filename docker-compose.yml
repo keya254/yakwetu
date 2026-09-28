@@ -5,7 +5,7 @@
 # with published ports, use docker-compose.dev.yml instead.
 #
 # Stack:
-#   yakwetu-storefront  → https://yakwetu.dontire.com       (nginx + app/ + /api proxy)
+#   yakwetu-storefront  → https://yakwetu.dontire.com       (React SPA + /api proxy)
 #   yakwetu-n8n         → https://n8n.yakwetu.dontire.com   (workflows + webhooks)
 #   yakwetu-paystack-api → internal only (reached via storefront /api/*)
 #   yakwetu-db          → Postgres 16 (n8n metadata + app tables)

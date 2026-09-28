@@ -1,7 +1,7 @@
 /* Yakwetu catalog — Kenyan / Kenya-set titles for demo.
    Prices are demo-cheap (KES 5–49). Posters: TMDB paths when present, else art gradient. */
 
-const CATALOG = [
+export const CATALOG = [
   { id:'nairobi-half-life', title:'Nairobi Half Life', year:2012, genre:'Crime Drama', price:15, emoji:'🌃', bg:'#1a1528', runtime:'1h 36m', rating:'7.4', director:'David Tosh Gitonga', cast:['Joseph Wairimu','Olwenya Maina','Nancy Wanjiru'], blurb:'A young actor chases fame and falls into Nairobi’s underworld.', tmdb:130737, imdb:'tt2187153', poster:'https://upload.wikimedia.org/wikipedia/commons/f/fc/Nairobi_Half_Life_Poster.png' },
   { id:'rafiki', title:'Rafiki', year:2018, genre:'Romance Drama', price:20, emoji:'🌈', bg:'#3f1e3a', runtime:'1h 23m', rating:'6.8', director:'Wanuri Kahiu', cast:['Samantha Mugatsia','Sheila Munyiva','Jimmy Gathu'], blurb:'Two young women fall in love against family and political pressure.', tmdb:505954, imdb:'tt8286894', poster:'' },
   { id:'40-sticks', title:'40 Sticks', year:2020, genre:'Crime Thriller', price:12, emoji:'🪓', bg:'#2a1010', runtime:'1h 21m', rating:'5.9', director:'Orlando Eastwood', cast:['Robert Agengo','Andreas Steiner','Muthoni Gathecha'], blurb:'Prisoners crash in the forest — and someone starts hunting them.', tmdb:718789, imdb:'tt12851524', poster:'' },
@@ -56,11 +56,11 @@ const CATALOG = [
   { id:'the-stigma', title:'The Stigma', year:2007, genre:'Drama', price:5, emoji:'🗣️', bg:'#2a2030', runtime:'1h 20m', rating:'6.3', director:'Kenyan indie', cast:['Ensemble'], blurb:'Silence and stigma confront a community.', tmdb:0, poster:'' },
 ];
 
-function getMovieById(id) {
+export function getMovieById(id) {
   return CATALOG.find((m) => m.id === id) || null;
 }
 
-function searchMovies(q) {
+export function searchMovies(q) {
   const s = String(q || '').trim().toLowerCase();
   if (!s) return CATALOG.slice();
   return CATALOG.filter(
@@ -73,26 +73,26 @@ function searchMovies(q) {
   );
 }
 
-function genresInCatalog() {
+export function genresInCatalog() {
   return Array.from(new Set(CATALOG.map((m) => m.genre))).sort();
 }
 
-function similarMovies(movie, limit = 12) {
+export function similarMovies(movie, limit = 12) {
   if (!movie) return CATALOG.slice(0, limit);
   const same = CATALOG.filter((m) => m.id !== movie.id && m.genre === movie.genre);
   const rest = CATALOG.filter((m) => m.id !== movie.id && m.genre !== movie.genre);
   return same.concat(rest).slice(0, limit);
 }
 
-function posterUrl(m) {
+export function posterUrl(m) {
   if (m && m.poster) return m.poster;
   return '';
 }
 
-function catalogForAI(limit = 55) {
+export function catalogForAI(limit = 55) {
   return CATALOG.slice(0, limit)
     .map((m) => `${m.title} (${m.genre}, KES ${m.price})`)
     .join('; ');
 }
 
-const MOVIES = CATALOG;
+export const MOVIES = CATALOG;

@@ -78,10 +78,12 @@ See [`yakwetu-n8n/README.md`](yakwetu-n8n/README.md) and [`yakwetu-n8n/verify.sq
 ## Layout
 
 ```
-app/                     Storefront HTML (baked into yakwetu-storefront image)
+storefront/              React + Vite SPA (Home, Movie, Checkout, Watch, Login)
+  public/admin.html      Admin dashboard
+  public/demo-lab.html   SMS / workflow demo tools
 deploy/
-  Dockerfile.storefront
-  nginx-storefront.conf  # proxies /api → yakwetu-paystack-api
+  Dockerfile.storefront  # builds storefront → nginx
+  nginx-storefront.conf  # SPA + /api → yakwetu-paystack-api
 services/paystack-api/
 yakwetu-n8n/             schema + workflows
 docker-compose.yml       Dokploy / production
