@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const b = $json.body || $json;\nconst required = ['event_type', 'user_id'];\nfor (const r of required) {\n  if (!b[r]) throw new Error(`Missing required field: ${r}`);\n}\nconst VALID = ['signup','browse','checkout_start','payment_failed','payment_success','watch_complete','demo_abandon'];\nif (!VALID.includes(b.event_type)) throw new Error('Unknown event_type: ' + b.event_type);\n\nreturn [{ json: {\n  event_type: b.event_type,\n  user_id: String(b.user_id),\n  name: b.name || '',\n  phone: String(b.phone || '').replace(/\\s/g,''),\n  email: b.email || '',\n  session_id: b.session_id || ('sess_' + Date.now()),\n  movie_id: b.movie_id || null,\n  movie_title: b.movie_title || null,\n  genre: b.genre || null,\n  price_kes: b.price_kes || null,\n  failure_reason: b.failure_reason || null,\n  channel_pref: b.channel_pref || 'sms',\n  ts: b.ts || new Date().toISOString()\n}}];"
+        "jsCode": "const b = $json.body || $json;\nconst required = ['event_type', 'user_id'];\nfor (const r of required) {\n  if (!b[r]) throw new Error(`Missing required field: ${r}`);\n}\nconst VALID = ['signup','browse','checkout_start','payment_failed','payment_success','watch_complete','demo_abandon'];\nif (!VALID.includes(b.event_type)) throw new Error('Unknown event_type: ' + b.event_type);\n\nreturn [{ json: {\n  event_type: b.event_type,\n  user_id: String(b.user_id),\n  name: b.name || '',\n  phone: String(b.phone || '').replace(/\\s/g,''),\n  email: b.email || '',\n  session_id: b.session_id || ('sess_' + Date.now()),\n  movie_id: b.movie_id || null,\n  movie_title: b.movie_title || null,\n  genre: b.genre || null,\n  price_kes: b.price_kes || null,\n  failure_reason: b.failure_reason || null,\n  channel_pref: b.channel_pref || 'sms',\n  skip_sms: Boolean(b.skip_sms),\n  ts: b.ts || new Date().toISOString()\n}}];"
       },
       "id": "d4773697-1b41-48ba-ae06-3e68587104b3",
       "name": "Normalize & Validate",
@@ -252,6 +252,36 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "skip1",
+              "leftValue": "={{ $('Normalize & Validate').item.json.skip_sms }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a11a-skip-payment-sms",
+      "name": "Skip Payment SMS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        80
+      ]
     },
     {
       "parameters": {
@@ -558,7 +588,7 @@
       "main": [
         [
           {
-            "node": "Build Payment SMS",
+            "node": "Skip Payment SMS?",
             "type": "main",
             "index": 0
           }
@@ -625,6 +655,24 @@
         [
           {
             "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Payment SMS?": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Payment SMS",
             "type": "main",
             "index": 0
           }

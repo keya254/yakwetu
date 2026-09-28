@@ -12,17 +12,22 @@
   .logo{font-size:26px;font-weight:800;letter-spacing:4px;color:var(--gold);text-decoration:none}
   .logo span{color:var(--text);font-weight:300}
   main{max-width:860px;margin:0 auto;padding:40px 20px 120px}
+  .status{display:inline-flex;align-items:center;gap:8px;background:#1a2a1a;border:1px solid #2a4a2a;color:var(--green);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;margin-bottom:16px}
+  .status .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.4s ease infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   .player{background:#000;border-radius:16px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;border:1px solid #23232e;position:relative;overflow:hidden}
   .player .emoji{font-size:72px}
   .bar{position:absolute;bottom:0;left:0;height:5px;background:var(--gold);width:0%;transition:width .5s}
-  .controls{display:flex;gap:12px;margin-top:18px;align-items:center}
-  .controls button{background:var(--gold);color:#0e0e14;border:none;padding:10px 20px;border-radius:10px;font-weight:700;cursor:pointer}
-  .controls .ghost{background:#2c2c3a;color:var(--text)}
-  .hint{color:var(--muted);font-size:13px;margin-top:14px}
+  .controls{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px;align-items:center}
+  .controls button{border:none;padding:12px 22px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px}
+  .controls #playBtn{background:#2c2c3a;color:var(--text)}
+  .controls #finishBtn{background:var(--gold);color:#0e0e14}
+  .controls #finishBtn:disabled{opacity:.45;cursor:default}
+  .hint{color:var(--muted);font-size:13px;margin-top:14px;line-height:1.5}
   .done{display:none;margin-top:28px;background:var(--panel);border:1px solid var(--gold);border-radius:14px;padding:24px;text-align:center}
   .done .big{font-size:44px}
-  .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid #23232e;padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
-  .cfg input{background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;width:320px}
+  .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid #23232e;padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .cfg input{background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;width:280px}
   .cfg button{background:#2c2c3a;color:var(--text);border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
   #toast{position:fixed;top:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:20}
   .t{background:#1c1c26;border-left:3px solid var(--gold);padding:10px 16px;border-radius:8px;font-size:13px;max-width:320px}
@@ -31,60 +36,101 @@
 <body>
 <header><a class="logo" href="index.html">YAKWETU<span>·stream</span></a></header>
 <main>
+  <div class="status" id="liveStatus"><span class="dot"></span> Movie started</div>
   <h1 id="title" style="margin-bottom:6px">—</h1>
   <p id="genre" style="color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px">—</p>
   <div class="player">
     <div class="emoji">🎬</div>
-    <div id="pct" style="color:var(--muted);font-size:14px">Paused</div>
+    <div id="pct" style="color:var(--muted);font-size:14px">Starting…</div>
     <div class="bar" id="bar"></div>
   </div>
   <div class="controls">
-    <button id="playBtn" onclick="togglePlay()">▶ Play</button>
-    <button class="ghost" onclick="finish()">⏭ Simulate: finish watching</button>
+    <button id="playBtn" type="button" onclick="togglePlay()">⏸ Pause</button>
+    <button id="finishBtn" type="button" onclick="finish()">Finish watching</button>
   </div>
-  <p class="hint">In production this is the real player; "finish watching" fires the same <code>watch_complete</code> event the player SDK would send at credits.</p>
+  <p class="hint">
+    Playback is live for this demo. When you click <b>Finish watching</b>, we send
+    <code>watch_complete</code> to n8n — YKW-04 will SMS a personalized bundle recommendation.
+  </p>
   <div class="done" id="done">
     <div class="big">🍿</div>
-    <h2>Credits rolled!</h2>
-    <p style="color:var(--muted);margin-top:8px"><code>watch_complete</code> sent — the post-watch upsell workflow is now counting down.<br>Check the email inbox for a hand-picked bundle.</p>
+    <h2>You finished the movie</h2>
+    <p style="color:var(--muted);margin-top:8px;line-height:1.5">
+      Recommendation workflow started. Check your phone for an SMS with a hand-picked bundle
+      (usually within about a minute).
+    </p>
+    <p style="margin-top:16px"><a href="index.html" style="color:var(--gold)">← Back to browse</a></p>
   </div>
 </main>
 <div class="cfg">
-  <span>⚙️ n8n webhook base:</span>
-  <input id="whBase" placeholder="https://your-n8n.example.com">
-  <button onclick="saveCfg()">Save</button><span id="cfgStatus"></span>
+  <span>Events →</span>
+  <input id="whBase" placeholder="leave blank = /api/events (live)">
+  <button type="button" onclick="saveCfg()">Save</button>
+  <span id="cfgStatus"></span>
 </div>
 <div id="toast"></div>
 
 <script src="shared.js"></script>
 <script>
 const p = new URLSearchParams(location.search);
-const movie = { id: p.get('m') || 'nairobi-nights', title: p.get('title') || 'Nairobi Nights',
-                genre: p.get('genre') || 'Crime Drama', price: Number(p.get('price') || 150) };
+const movie = {
+  id: p.get('m') || 'nairobi-nights',
+  title: p.get('title') || 'Nairobi Nights',
+  genre: p.get('genre') || 'Crime Drama',
+  price: Number(p.get('price') || 150)
+};
 document.getElementById('title').textContent = movie.title;
 document.getElementById('genre').textContent = movie.genre;
+document.title = movie.title + ' — Yakwetu';
 
-let playing = false, pct = 0, timer = null;
+let playing = true, pct = 0, timer = null, finished = false;
+
+function startPlayback(){
+  document.getElementById('pct').textContent = 'Playing · 0%';
+  document.getElementById('liveStatus').innerHTML = '<span class="dot"></span> Movie started';
+  toast('Movie started — enjoy the film');
+  timer = setInterval(() => {
+    if (!playing || finished) return;
+    pct = Math.min(99, pct + 1);
+    document.getElementById('bar').style.width = pct + '%';
+    document.getElementById('pct').textContent = 'Playing · ' + pct + '%';
+  }, 800);
+}
+
 function togglePlay(){
+  if (finished) return;
   playing = !playing;
   document.getElementById('playBtn').textContent = playing ? '⏸ Pause' : '▶ Play';
-  if (playing) {
-    timer = setInterval(() => {
-      pct = Math.min(100, pct + 2);
-      document.getElementById('bar').style.width = pct + '%';
-      document.getElementById('pct').textContent = 'Playing · ' + pct + '%';
-      if (pct >= 100) { clearInterval(timer); finish(); }
-    }, 400);
-  } else { clearInterval(timer); document.getElementById('pct').textContent = 'Paused · ' + pct + '%'; }
+  document.getElementById('pct').textContent = (playing ? 'Playing' : 'Paused') + ' · ' + pct + '%';
+  document.getElementById('liveStatus').innerHTML = playing
+    ? '<span class="dot"></span> Movie started'
+    : '<span class="dot" style="animation:none;opacity:.5"></span> Paused';
 }
+
 async function finish(){
-  clearInterval(timer); playing = false;
-  pct = 100; document.getElementById('bar').style.width = '100%';
+  if (finished) return;
+  finished = true;
+  clearInterval(timer);
+  playing = false;
+  pct = 100;
+  document.getElementById('bar').style.width = '100%';
   document.getElementById('pct').textContent = 'Finished';
-  await track('watch_complete', movie);
+  document.getElementById('playBtn').disabled = true;
+  document.getElementById('finishBtn').disabled = true;
+  document.getElementById('finishBtn').textContent = 'Sending…';
+  document.getElementById('liveStatus').innerHTML = '<span class="dot" style="animation:none"></span> Finished watching';
+
+  const r = await track('watch_complete', movie);
+  document.getElementById('finishBtn').textContent = 'Finished';
   document.getElementById('done').style.display = 'block';
-  toast('🍿 watch_complete sent — upsell sequence started');
+  if (r && r.error) {
+    toast('Could not notify n8n: ' + r.error, true);
+  } else {
+    toast('Finished watching — recommendation SMS on the way');
+  }
 }
+
+startPlayback();
 </script>
 </body>
 </html>

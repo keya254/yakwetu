@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yakwetu Admin</title>
+<style>
+  :root{--bg:#0b0b10;--panel:#15151d;--line:#262633;--gold:#e8b54a;--text:#f3efe6;--muted:#9a94a8;--green:#3ddc84;--red:#ff6b6b}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+  h1{color:var(--gold);font-size:22px;letter-spacing:1px}
+  .sub{color:var(--muted);font-size:13px;margin:6px 0 20px}
+  .auth,.gate{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  input,textarea,button{background:#1c1c26;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px 12px;font-size:13px}
+  button{background:var(--gold);color:#111;font-weight:700;border:none;cursor:pointer}
+  button.ghost{background:#22222c;color:var(--text)}
+  button:disabled{opacity:.5}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .stat .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+  .stat .v{font-size:24px;font-weight:800;margin-top:6px;color:var(--gold)}
+  .panels{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}
+  @media(max-width:960px){.panels{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;overflow:auto}
+  .panel h2{font-size:15px;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  .tag{display:inline-block;padding:2px 7px;border-radius:999px;font-size:11px;background:#222}
+  .tag.ok{color:var(--green)} .tag.bad{color:var(--red)} .tag.warn{color:var(--gold)}
+  .follow{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .follow textarea{min-height:72px;resize:vertical}
+  .msg{color:var(--muted);font-size:12px;margin-top:8px}
+  .err{color:var(--red);font-size:13px}
+  a{color:var(--gold)}
+  #dash{display:none}
+  #dash.on{display:block}
+</style>
+</head>
+<body>
+  <h1>YAKWETU · admin</h1>
+  <p class="sub">Admin phone: <b>+254702846542</b>. Request an OTP to that number to unlock analytics and follow-ups.</p>
+
+  <div id="gate" class="gate">
+    <input id="adminPhone" value="+254702846542" readonly style="width:160px">
+    <button type="button" id="otpBtn" onclick="requestAdminOtp()">Send admin OTP</button>
+    <input id="adminCode" placeholder="6-digit code" inputmode="numeric" style="width:120px">
+    <button type="button" onclick="verifyAdminOtp()">Verify</button>
+    <span class="err" id="gateErr"></span>
+  </div>
+
+  <div id="dash">
+    <div class="auth">
+      <span class="msg" id="who"></span>
+      <button class="ghost" type="button" onclick="refresh()">Refresh</button>
+      <button class="ghost" type="button" onclick="logoutAdmin()">Lock</button>
+      <a href="index.html">← Storefront</a>
+    </div>
+    <div class="grid" id="stats"></div>
+    <div class="panels">
+      <div class="panel">
+        <h2>Payments & checkout</h2>
+        <div id="payments" class="msg"></div>
+      </div>
+      <div class="panel">
+        <h2>Follow-up queue</h2>
+        <div id="followups" class="msg"></div>
+      </div>
+      <div class="panel">
+        <h2>Recent events</h2>
+        <div id="events"></div>
+      </div>
+      <div class="panel">
+        <h2>Nudges sent</h2>
+        <div id="nudges"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const TOKEN_KEY = 'ykw_admin_token';
+const PHONE_KEY = 'ykw_admin_phone';
+
+function token(){ return localStorage.getItem(TOKEN_KEY) || ''; }
+function setSession(t, phone){
+  localStorage.setItem(TOKEN_KEY, t);
+  localStorage.setItem(PHONE_KEY, phone || '+254702846542');
+}
+function logoutAdmin(){
+  localStorage.removeItem(TOKEN_KEY);
+  document.getElementById('dash').classList.remove('on');
+  document.getElementById('gate').style.display = 'flex';
+}
+
+async function api(path, opts = {}){
+  const headers = Object.assign({ 'x-admin-token': token() }, opts.headers || {});
+  if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  const r = await fetch(path, { ...opts, headers });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+  return data;
+}
+
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtTs(ts){
+  try { return new Date(ts).toLocaleString(); } catch { return ts; }
+}
+
+async function requestAdminOtp(){
+  const err = document.getElementById('gateErr');
+  err.textContent = '';
+  const btn = document.getElementById('otpBtn');
+  btn.disabled = true;
+  try {
+    const phone = document.getElementById('adminPhone').value.trim();
+    await fetch('/api/admin/request-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'OTP failed');
+      return d;
+    });
+    err.style.color = 'var(--green)';
+    err.textContent = 'OTP sent to ' + phone;
+  } catch (e) {
+    err.style.color = 'var(--red)';
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function verifyAdminOtp(){
+  const err = document.getElementById('gateErr');
+  err.textContent = '';
+  try {
+    const phone = document.getElementById('adminPhone').value.trim();
+    const code = document.getElementById('adminCode').value.trim();
+    const r = await fetch('/api/admin/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, code })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Verify failed');
+    setSession(d.token, d.phone);
+    unlock();
+    await refresh();
+  } catch (e) {
+    err.style.color = 'var(--red)';
+    err.textContent = e.message;
+  }
+}
+
+function unlock(){
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('dash').classList.add('on');
+  document.getElementById('who').textContent = 'Signed in as admin ' + (localStorage.getItem(PHONE_KEY) || '');
+}
+
+async function refresh(){
+  if (!token()) return;
+  try {
+    const [summary, payments, followups, events, nudges] = await Promise.all([
+      api('/api/admin/summary'),
+      api('/api/admin/payments'),
+      api('/api/admin/followups'),
+      api('/api/admin/events?limit=40'),
+      api('/api/admin/nudges'),
+    ]);
+    unlock();
+    renderStats(summary);
+    renderPayments(payments.payments || []);
+    renderFollowups(followups.candidates || []);
+    renderEvents(events.events || []);
+    renderNudges(nudges.nudges || []);
+  } catch (e) {
+    logoutAdmin();
+    document.getElementById('gateErr').textContent = e.message + ' — request a new OTP';
+  }
+}
+
+function renderStats(s){
+  const cards = [
+    ['Users', s.users],
+    ['Payments OK', s.payment_success],
+    ['Payments failed', s.payment_failed],
+    ['Watches finished', s.watch_complete],
+    ['Revenue (KES)', Math.round(s.revenue_kes || 0)],
+  ];
+  document.getElementById('stats').innerHTML = cards.map(([k,v]) =>
+    `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`
+  ).join('');
+}
+
+function renderPayments(rows){
+  if (!rows.length) {
+    document.getElementById('payments').innerHTML = '<p class="msg">No payment events yet.</p>';
+    return;
+  }
+  document.getElementById('payments').innerHTML = `<table>
+    <tr><th>When</th><th>Type</th><th>User</th><th>Movie</th><th>KES</th><th>Note</th></tr>
+    ${rows.map(r => `<tr>
+      <td>${esc(fmtTs(r.ts))}</td>
+      <td><span class="tag ${r.event_type==='payment_success'?'ok':r.event_type==='payment_failed'?'bad':'warn'}">${esc(r.event_type)}</span></td>
+      <td>${esc(r.name||r.user_id)}<br><span style="color:var(--muted)">${esc(r.phone||'')}</span></td>
+      <td>${esc(r.movie_title||'—')}</td>
+      <td>${r.price_kes != null ? esc(r.price_kes) : '—'}</td>
+      <td>${esc(r.failure_reason||'')}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+function renderFollowups(rows){
+  const host = document.getElementById('followups');
+  if (!rows.length) {
+    host.innerHTML = '<p class="msg">No open abandon/fail sessions.</p>';
+    return;
+  }
+  host.innerHTML = rows.map((r, i) => {
+    const defaultMsg = r.state === 'failed'
+      ? `Hi ${(r.name||'').split(' ')[0]||'there'} — your payment for ${r.last_movie_title||'your movie'} didn’t go through. No money was lost. Retry: https://yakwetu.dontire.com/checkout.html?resume=${r.session_id}`
+      : `Hi ${(r.name||'').split(' ')[0]||'there'} — ${r.last_movie_title||'your movie'} is still waiting on Yakwetu. Finish checkout: https://yakwetu.dontire.com/checkout.html?resume=${r.session_id}`;
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px">
+      <div><b>${esc(r.name||r.user_id)}</b> · ${esc(r.phone)} · <span class="tag warn">${esc(r.state)}</span></div>
+      <div class="msg">${esc(r.last_movie_title||'—')} · idle ${esc(r.idle_minutes)} min · nudges ${esc(r.nudge_count)}</div>
+      <div class="follow">
+        <textarea id="msg_${i}">${esc(defaultMsg)}</textarea>
+        <button type="button" onclick='sendFollow(${JSON.stringify(r)}, ${i})'>Send SMS follow-up</button>
+        <div class="msg" id="st_${i}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function sendFollow(row, i){
+  const st = document.getElementById('st_' + i);
+  const message = document.getElementById('msg_' + i).value.trim();
+  st.textContent = 'Sending…';
+  try {
+    const data = await api('/api/admin/follow-up', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: row.user_id,
+        phone: row.phone,
+        name: row.name,
+        session_id: row.session_id,
+        movie_title: row.last_movie_title,
+        message,
+        scenario: row.state === 'failed' ? 'admin_payment_rescue' : 'admin_abandon_nudge',
+      }),
+    });
+    st.textContent = 'Sent to ' + data.sent_to;
+    st.style.color = 'var(--green)';
+  } catch (e) {
+    st.textContent = e.message;
+    st.style.color = 'var(--red)';
+  }
+}
+
+function renderEvents(rows){
+  document.getElementById('events').innerHTML = `<table>
+    <tr><th>When</th><th>Event</th><th>User</th><th>Movie</th></tr>
+    ${rows.map(r => `<tr>
+      <td>${esc(fmtTs(r.ts))}</td>
+      <td>${esc(r.event_type)}</td>
+      <td>${esc(r.name||r.user_id)}</td>
+      <td>${esc(r.movie_title||'—')}</td>
+    </tr>`).join('') || '<tr><td colspan="4">No events</td></tr>'}
+  </table>`;
+}
+
+function renderNudges(rows){
+  document.getElementById('nudges').innerHTML = `<table>
+    <tr><th>When</th><th>Scenario</th><th>User</th><th>Converted</th></tr>
+    ${rows.map(r => `<tr>
+      <td>${esc(fmtTs(r.sent_at))}</td>
+      <td>${esc(r.scenario)} / ${esc(r.channel)}</td>
+      <td>${esc(r.name||r.user_id)}</td>
+      <td>${r.converted ? 'yes' : 'no'}</td>
+    </tr>`).join('') || '<tr><td colspan="4">No nudges</td></tr>'}
+  </table>`;
+}
+
+if (token()) refresh();
+</script>
+</body>
+</html>

@@ -78,7 +78,7 @@
   </div>
   <div class="card">
     <h2>C — Watch complete</h2>
-    <p>YKW-01 → YKW-04. Upsell email (if SMTP) + SMS reminder ~2 min later if no buy.</p>
+    <p>YKW-01 → YKW-04. Upsell SMS after ~1 min; reminder SMS ~1 min later if no buy.</p>
     <button onclick="runWatch()">Finish watching</button>
   </div>
 </div>
@@ -184,10 +184,11 @@ async function runPaySuccess(){
 async function runWatch(){
   log('--- watch_complete ---');
   newSession();
-  await fire('payment_success', M.nights);
+  // Log purchase without another "payment received" SMS (skip_sms)
+  await fire('payment_success', M.nights, { skip_sms: true });
   await fire('watch_complete', M.nights);
-  toast('Expect YKW-04 after ~1 min wait; SMS reminder ~1 min later if no buy');
-  log('YKW-01 should call YKW-04 (Active + Postgres; SMTP optional)');
+  toast('Expect upsell SMS in ~1 min (no extra payment SMS)');
+  log('YKW-01 → YKW-04 (payment logged silently, then upsell SMS)');
 }
 
 (function(){

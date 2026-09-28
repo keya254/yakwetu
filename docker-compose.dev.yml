@@ -109,8 +109,20 @@ services:
       PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET:-}
       PAYSTACK_CURRENCY: ${PAYSTACK_CURRENCY:-KES}
       N8N_EVENT_WEBHOOK: ${N8N_EVENT_WEBHOOK:-http://yakwetu-n8n:5678/webhook/yakwetu-event}
+      AT_API_KEY: ${AT_API_KEY:-}
+      AT_USERNAME: ${AT_USERNAME:-}
+      AT_SENDER_ID: ${AT_SENDER_ID:-AFTKNG}
+      AT_API_URL: ${AT_API_URL:-https://api.africastalking.com/version1/messaging}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-yakwetu-admin}
+      ADMIN_PHONE: ${ADMIN_PHONE:-+254702846542}
+      POSTGRES_HOST: yakwetu-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-yakwetu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yakwetu}
+      POSTGRES_DB: ${POSTGRES_DB:-yakwetu}
     depends_on:
       - yakwetu-n8n
+      - yakwetu-db
 
 volumes:
   yakwetu_db_data:

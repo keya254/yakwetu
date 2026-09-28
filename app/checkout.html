@@ -63,11 +63,11 @@
       <button class="pay" id="payBtn" onclick="startPay()">Pay with Paystack</button>
       <button class="alt" id="simBtn" onclick="startSimStk()" style="display:none">Simulate M-Pesa STK (no keys)</button>
       <div class="demo" id="demoBox">
-        <p>Demo controls — force events without Paystack</p>
+        <p>Simulate payment outcomes (fires live n8n SMS)</p>
         <button onclick="resolvePay(true)">✅ Success</button>
         <button onclick="resolvePay(false,'Insufficient balance')">❌ Insufficient funds</button>
         <button onclick="resolvePay(false,'Wrong M-Pesa PIN entered')">❌ Wrong PIN</button>
-        <button onclick="resolvePay(false,'Request timed out / cancelled by user')">❌ Timeout</button>
+        <button onclick="resolvePay(false,'Request timed out / cancelled by user')">❌ Timeout / cancel</button>
       </div>
     </div>
     <div class="stk" id="stkView">
@@ -83,14 +83,14 @@
     <div class="result" id="failView">
       <div class="big">😬</div><h2>Payment didn't go through</h2>
       <p style="color:var(--muted);margin:8px 0 4px" id="failReason"></p>
-      <p style="color:var(--gold);font-size:13px">Yakwetu support has been notified — expect a WhatsApp message shortly.</p>
+      <p style="color:var(--gold);font-size:13px">We’ll SMS you right away with help to complete payment.</p>
       <button class="alt" style="margin-top:16px" onclick="retry()">Try again</button>
     </div>
   </div>
 </main>
 <div class="cfg">
-  <span>⚙️ n8n webhook base:</span>
-  <input id="whBase" placeholder="https://your-n8n.example.com">
+  <span>Events →</span>
+  <input id="whBase" placeholder="leave blank = /api/events (live)">
   <button onclick="saveCfg()">Save</button><span id="cfgStatus"></span>
 </div>
 <div id="toast"></div>
@@ -143,10 +143,13 @@ if (resumed) {
   track('checkout_start', movie, { resumed_from_nudge: true });
 }
 
+let payOutcome = null; // 'success' | 'failed' | null
+
 async function startPay(){
   USER.phone = document.getElementById('phone').value.trim() || USER.phone;
   USER.email = document.getElementById('email').value.trim() || USER.email;
   localStorage.setItem('ykw_user', JSON.stringify(USER));
+  payOutcome = null;
   await track('checkout_start', movie);
 
   if (!paystackEnabled) {
@@ -178,7 +181,6 @@ async function startPay(){
 
     document.getElementById('stkMsg').textContent = 'Complete payment in the Paystack window';
 
-    // Classic Inline.js (widely supported). Reference comes from server initialize.
     if (typeof PaystackPop !== 'undefined' && PaystackPop.setup) {
       const handler = PaystackPop.setup({
         key: data.publicKey,
@@ -187,12 +189,16 @@ async function startPay(){
         currency: 'KES',
         ref: data.reference,
         callback: function(response){
+          payOutcome = 'pending';
           verifyAndFinish(response.reference);
         },
         onClose: function(){
+          if (payOutcome === 'success' || payOutcome === 'failed' || payOutcome === 'pending') return;
+          payOutcome = 'failed';
           document.getElementById('stkView').style.display = 'none';
-          document.getElementById('payView').style.display = 'block';
-          toast('Payment window closed', true);
+          track('payment_failed', movie, {
+            failure_reason: 'Request timed out / cancelled by user'
+          }).then(() => showFail('Payment window closed before completion'));
         }
       });
       handler.openIframe();
@@ -217,11 +223,19 @@ async function verifyAndFinish(reference){
     if (!r.ok) throw new Error(data.error || 'Verify failed');
 
     if (data.status === 'success' || data.event_type === 'payment_success') {
+      payOutcome = 'success';
+      if (!data.emitted) await track('payment_success', movie);
       showSuccess();
     } else {
-      showFail(data.gateway_response || 'Payment failed');
+      payOutcome = 'failed';
+      const reason = data.gateway_response || 'Payment failed';
+      if (!data.emitted) {
+        await track('payment_failed', movie, { failure_reason: reason });
+      }
+      showFail(reason);
     }
   } catch (e) {
+    payOutcome = 'failed';
     toast(String(e.message || e), true);
     document.getElementById('stkView').style.display = 'none';
     document.getElementById('payView').style.display = 'block';
@@ -241,11 +255,10 @@ function startSimStk(){
 }
 
 function showSuccess(){
-  localStorage.removeItem('ykw_session');
   document.getElementById('payView').style.display = 'none';
   document.getElementById('stkView').style.display = 'none';
   document.getElementById('okView').style.display = 'block';
-  toast('payment_success — nudge attribution updated');
+  toast('Payment received — SMS confirmation on the way');
 }
 
 function showFail(reason){
@@ -253,14 +266,16 @@ function showFail(reason){
   document.getElementById('stkView').style.display = 'none';
   document.getElementById('failView').style.display = 'block';
   document.getElementById('failReason').textContent = reason;
-  toast('payment_failed — rescue workflow triggered', true);
+  toast('Payment failed — rescue SMS on the way', true);
 }
 
 async function resolvePay(success, reason){
   if (success) {
+    payOutcome = 'success';
     await track('payment_success', movie);
     showSuccess();
   } else {
+    payOutcome = 'failed';
     await track('payment_failed', movie, { failure_reason: reason });
     showFail(reason);
   }

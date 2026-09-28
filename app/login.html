@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Yakwetu</title>
+<style>
+  :root{--bg:#0e0e14;--panel:#17171f;--gold:#e8b54a;--text:#f5f0e6;--muted:#9a94a8;--green:#3ddc84;--red:#ff5c5c}
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{background:var(--panel);border:1px solid #23232e;border-radius:18px;padding:32px;width:420px;max-width:100%}
+  .logo{font-size:22px;font-weight:800;letter-spacing:3px;color:var(--gold);margin-bottom:8px}
+  .logo span{color:var(--text);font-weight:300}
+  h1{font-size:22px;margin-bottom:8px}
+  p{color:var(--muted);font-size:14px;line-height:1.45;margin-bottom:22px}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+  input{width:100%;background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:12px 14px;border-radius:10px;font-size:15px;margin-bottom:14px}
+  button{width:100%;border:none;padding:14px;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer}
+  .primary{background:var(--gold);color:#0e0e14}
+  .ghost{background:transparent;border:1px solid #2c2c3a;color:var(--muted);margin-top:10px}
+  button:disabled{opacity:.5;cursor:wait}
+  .err{color:var(--red);font-size:13px;margin-bottom:10px;min-height:18px}
+  .step{display:none}
+  .step.on{display:block}
+  #toast{position:fixed;top:20px;right:20px;z-index:20;display:flex;flex-direction:column;gap:8px}
+  .t{background:#1c1c26;border-left:3px solid var(--gold);padding:10px 16px;border-radius:8px;font-size:13px;max-width:300px}
+  .t.err{border-left-color:var(--red)}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">YAKWETU<span>·stream</span></div>
+  <h1>Sign up / log in</h1>
+  <p>Enter your name and phone. We’ll SMS a one-time code — that’s the number we use for payment and recommendation texts.</p>
+
+  <div id="err" class="err"></div>
+
+  <div class="step on" id="step1">
+    <label>Your name</label>
+    <input id="name" placeholder="Wanjiku Mwangi" autocomplete="name">
+    <label>Phone (M-Pesa / SMS)</label>
+    <input id="phone" placeholder="+2547XXXXXXXX" autocomplete="tel">
+    <button class="primary" id="sendBtn" type="button" onclick="requestOtp()">Send OTP</button>
+  </div>
+
+  <div class="step" id="step2">
+    <label>Enter the 6-digit code we sent to <b id="phoneShow"></b></label>
+    <input id="code" placeholder="123456" inputmode="numeric" autocomplete="one-time-code">
+    <button class="primary" id="verifyBtn" type="button" onclick="verifyOtp()">Verify &amp; continue</button>
+    <button class="ghost" type="button" onclick="backToStep1()">Use a different number</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="shared.js"></script>
+<script>
+// login page must not redirect itself
+const params = new URLSearchParams(location.search);
+const next = params.get('next') || 'index.html';
+let pendingPhone = '';
+
+if (isLoggedIn()) location.href = next;
+
+function showErr(msg){ document.getElementById('err').textContent = msg || ''; }
+
+async function requestOtp(){
+  showErr('');
+  const name = document.getElementById('name').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/auth/request-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Could not send OTP');
+    pendingPhone = data.phone;
+    document.getElementById('phoneShow').textContent = pendingPhone;
+    document.getElementById('step1').classList.remove('on');
+    document.getElementById('step2').classList.add('on');
+    toast('OTP sent by SMS');
+  } catch (e) {
+    showErr(String(e.message || e));
+    toast(String(e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function verifyOtp(){
+  showErr('');
+  const code = document.getElementById('code').value.trim();
+  const btn = document.getElementById('verifyBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: pendingPhone, code })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Verification failed');
+    saveUser(data.user);
+    toast('Welcome, ' + data.user.name);
+    location.href = next;
+  } catch (e) {
+    showErr(String(e.message || e));
+    toast(String(e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function backToStep1(){
+  document.getElementById('step2').classList.remove('on');
+  document.getElementById('step1').classList.add('on');
+  showErr('');
+}
+</script>
+</body>
+</html>

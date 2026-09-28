@@ -42,19 +42,24 @@
 <body>
 <header>
   <div class="logo">YAKWETU<span>·stream</span></div>
-  <nav><a href="index.html">Browse</a><a href="checkout.html">Checkout</a><a href="watch.html">Watch</a></nav>
+  <nav>
+    <a href="index.html">Browse</a>
+    <a href="demo-lab.html">Demo Lab</a>
+    <a href="admin.html">Admin</a>
+    <a href="#" id="logoutBtn">Log out</a>
+  </nav>
 </header>
 
 <div class="hero">
   <h1>African stories, <em>owned by you.</em> No subscription — buy what you love.</h1>
-  <p>Direct purchases from Kenya's boldest filmmakers. Pay with M-Pesa, watch instantly.</p>
+  <p>Buy with Paystack / M-Pesa. Failures and finishes trigger live SMS from n8n (rescue + recommendations).</p>
 </div>
 
 <div class="grid" id="grid"></div>
 
 <div class="cfg">
-  <span>⚙️ n8n webhook base:</span>
-  <input id="whBase" placeholder="https://your-n8n.example.com  (leave blank = offline demo)">
+  <span>Events →</span>
+  <input id="whBase" placeholder="leave blank = /api/events (live n8n)">
   <button onclick="saveCfg()">Save</button>
   <span id="cfgStatus"></span>
   <span style="margin-left:auto">viewer: <b id="who"></b></span>
@@ -83,7 +88,11 @@ MOVIES.forEach(m => {
     <div class="meta">
       <h3>${m.title}</h3>
       <div class="genre">${m.genre}</div>
-      <div class="row"><span class="price">KES ${m.price}</span><button class="buy">Buy</button></div>
+  <div class="row"><span class="price">KES ${m.price}</span>
+    <span style="display:flex;gap:8px">
+      <button class="buy" data-act="buy">Buy</button>
+    </span>
+  </div>
     </div>`;
   el.querySelector('.poster').onclick = () => viewMovie(m);
   el.querySelector('.meta h3').onclick = () => viewMovie(m);

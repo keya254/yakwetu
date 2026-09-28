@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const { Pool } = require('pg');
 
 const PORT = Number(process.env.PORT || 3001);
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
@@ -11,6 +12,35 @@ const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET || '';
 const N8N_EVENT_WEBHOOK =
   process.env.N8N_EVENT_WEBHOOK || 'http://yakwetu-n8n:5678/webhook/yakwetu-event';
 const CURRENCY = process.env.PAYSTACK_CURRENCY || 'KES';
+const AT_API_KEY = process.env.AT_API_KEY || '';
+const AT_USERNAME = process.env.AT_USERNAME || '';
+const AT_SENDER_ID = process.env.AT_SENDER_ID || 'AFTKNG';
+const AT_API_URL =
+  process.env.AT_API_URL || 'https://api.africastalking.com/version1/messaging';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'yakwetu-admin';
+const ADMIN_PHONE = normalizePhoneEnv(
+  process.env.ADMIN_PHONE || '+254702846542'
+);
+
+function normalizePhoneEnv(phone) {
+  let p = String(phone || '').replace(/\s+/g, '');
+  if (p.startsWith('07') || p.startsWith('01')) p = '+254' + p.slice(1);
+  if (p.startsWith('254') && !p.startsWith('+')) p = '+' + p;
+  return p;
+}
+
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'yakwetu-db',
+  port: Number(process.env.POSTGRES_PORT || 5432),
+  user: process.env.POSTGRES_USER || 'yakwetu',
+  password: process.env.POSTGRES_PASSWORD || 'yakwetu',
+  database: process.env.POSTGRES_DB || 'yakwetu',
+  max: 5,
+});
+
+/** phone → { code, name, phone, expiresAt } */
+const otpStore = new Map();
+const OTP_TTL_MS = 10 * 60 * 1000;
 
 const app = express();
 
@@ -45,6 +75,128 @@ app.use(express.json());
 
 app.get('/api/ping', (_req, res) => res.json({ ok: true }));
 
+function normalizePhone(phone) {
+  let p = String(phone || '').replace(/\s+/g, '');
+  if (p.startsWith('07') || p.startsWith('01')) p = '+254' + p.slice(1);
+  if (p.startsWith('254') && !p.startsWith('+')) p = '+' + p;
+  return p;
+}
+
+function userIdFromPhone(phone) {
+  const digits = String(phone).replace(/\D/g, '');
+  return 'u_' + digits.slice(-9);
+}
+
+async function sendAtSms(to, message) {
+  if (!AT_API_KEY || !AT_USERNAME || !AT_SENDER_ID) {
+    const err = new Error('AT_USERNAME, AT_API_KEY, and AT_SENDER_ID must be set on paystack-api');
+    err.code = 'at_not_configured';
+    throw err;
+  }
+  const body = new URLSearchParams({
+    username: AT_USERNAME,
+    to,
+    message,
+    from: AT_SENDER_ID,
+    bulkSMSMode: '1',
+  });
+  const r = await fetch(AT_API_URL, {
+    method: 'POST',
+    headers: {
+      apiKey: AT_API_KEY,
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  });
+  const text = await r.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { raw: text };
+  }
+  if (!r.ok) {
+    throw new Error(`AT SMS failed ${r.status}: ${text.slice(0, 200)}`);
+  }
+  return json;
+}
+
+/** Request OTP — SMS via Africa's Talking */
+app.post('/api/auth/request-otp', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const phone = normalizePhone(req.body?.phone);
+    if (!name || name.length < 2) {
+      return res.status(400).json({ error: 'Enter your name (at least 2 characters)' });
+    }
+    if (!/^\+254[17]\d{8}$/.test(phone)) {
+      return res.status(400).json({
+        error: 'Use a valid Kenyan phone like +2547XXXXXXXX',
+      });
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    otpStore.set(phone, {
+      code,
+      name,
+      phone,
+      expiresAt: Date.now() + OTP_TTL_MS,
+    });
+    const msg = `Yakwetu login code: ${code}. Valid 10 minutes. Don't share it.`;
+    await sendAtSms(phone, msg);
+    res.json({
+      ok: true,
+      phone,
+      expires_in_sec: Math.floor(OTP_TTL_MS / 1000),
+      hint: 'OTP sent by SMS',
+    });
+  } catch (e) {
+    console.error('request-otp', e);
+    res.status(e.code === 'at_not_configured' ? 503 : 502).json({
+      error: String(e.message || e),
+    });
+  }
+});
+
+/** Verify OTP → session user for storefront */
+app.post('/api/auth/verify-otp', async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body?.phone);
+    const code = String(req.body?.code || '').trim();
+    const row = otpStore.get(phone);
+    if (!row || row.expiresAt < Date.now()) {
+      otpStore.delete(phone);
+      return res.status(400).json({ error: 'Code expired — request a new one' });
+    }
+    if (row.code !== code) {
+      return res.status(400).json({ error: 'Incorrect code' });
+    }
+    otpStore.delete(phone);
+    const user = {
+      user_id: userIdFromPhone(phone),
+      name: row.name,
+      phone,
+      email: '',
+      channel_pref: 'sms',
+    };
+    // Best-effort signup event into n8n
+    try {
+      await forwardToN8n({
+        event_type: 'signup',
+        ...user,
+        session_id: 'sess_auth_' + Date.now().toString(36),
+        ts: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('signup event failed', e.message || e);
+    }
+    res.json({ ok: true, user });
+  } catch (e) {
+    console.error('verify-otp', e);
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
 app.get('/api/health', async (_req, res) => {
   let n8n_ping = { ok: false };
   try {
@@ -59,6 +211,7 @@ app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
     paystack_configured: Boolean(PAYSTACK_SECRET_KEY && PAYSTACK_PUBLIC_KEY),
+    at_sms_configured: Boolean(AT_API_KEY && AT_USERNAME && AT_SENDER_ID),
     n8n_ping,
     n8n_event_webhook: N8N_EVENT_WEBHOOK,
   });
@@ -316,8 +469,242 @@ async function forwardToN8n(payload) {
   }
 }
 
+function requireAdmin(req, res, next) {
+  const token =
+    req.headers['x-admin-token'] ||
+    req.query.token ||
+    (req.body && req.body.token);
+  if (!token || token !== ADMIN_TOKEN) {
+    return res.status(401).json({ error: 'invalid admin token' });
+  }
+  next();
+}
+
+app.get('/api/admin/config', (_req, res) => {
+  res.json({
+    admin_phone_hint: ADMIN_PHONE.replace(/(\+254\d{2})\d{5}(\d{2})/, '$1*****$2'),
+    admin_phone: ADMIN_PHONE,
+  });
+});
+
+/** OTP only works for the configured ADMIN_PHONE */
+app.post('/api/admin/request-otp', async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body?.phone || ADMIN_PHONE);
+    if (phone !== ADMIN_PHONE) {
+      return res.status(403).json({
+        error: 'Only the configured admin phone can access this dashboard',
+      });
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    otpStore.set('admin:' + phone, {
+      code,
+      phone,
+      expiresAt: Date.now() + OTP_TTL_MS,
+      kind: 'admin',
+    });
+    await sendAtSms(
+      phone,
+      `Yakwetu admin code: ${code}. Valid 10 minutes.`
+    );
+    res.json({ ok: true, phone, expires_in_sec: Math.floor(OTP_TTL_MS / 1000) });
+  } catch (e) {
+    console.error('admin request-otp', e);
+    res.status(502).json({ error: String(e.message || e) });
+  }
+});
+
+app.post('/api/admin/verify-otp', async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body?.phone || ADMIN_PHONE);
+    const code = String(req.body?.code || '').trim();
+    if (phone !== ADMIN_PHONE) {
+      return res.status(403).json({ error: 'Not an admin phone' });
+    }
+    const row = otpStore.get('admin:' + phone);
+    if (!row || row.expiresAt < Date.now()) {
+      otpStore.delete('admin:' + phone);
+      return res.status(400).json({ error: 'Code expired — request a new one' });
+    }
+    if (row.code !== code) {
+      return res.status(400).json({ error: 'Incorrect code' });
+    }
+    otpStore.delete('admin:' + phone);
+    res.json({
+      ok: true,
+      token: ADMIN_TOKEN,
+      phone: ADMIN_PHONE,
+      name: 'Admin',
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/admin/summary', requireAdmin, async (_req, res) => {
+  try {
+    const q = async (sql, params = []) => (await pool.query(sql, params)).rows;
+    const [users, events, payments, fails, watches, sessions, nudges, dropoffs, revenue] =
+      await Promise.all([
+        q(`SELECT COUNT(*)::int AS n FROM users`),
+        q(`SELECT event_type, COUNT(*)::int AS n FROM events GROUP BY event_type ORDER BY n DESC`),
+        q(`SELECT COUNT(*)::int AS n FROM events WHERE event_type = 'payment_success'`),
+        q(`SELECT COUNT(*)::int AS n FROM events WHERE event_type = 'payment_failed'`),
+        q(`SELECT COUNT(*)::int AS n FROM events WHERE event_type = 'watch_complete'`),
+        q(`SELECT state, COUNT(*)::int AS n, SUM(CASE WHEN recovered THEN 1 ELSE 0 END)::int AS recovered
+           FROM sessions GROUP BY state ORDER BY n DESC`),
+        q(`SELECT scenario, channel, COUNT(*)::int AS sent,
+                  SUM(CASE WHEN converted THEN 1 ELSE 0 END)::int AS converted
+           FROM nudges GROUP BY scenario, channel ORDER BY sent DESC`),
+        q(`SELECT COALESCE(failure_class,'(unknown)') AS failure_class, COUNT(*)::int AS n
+           FROM dropoffs GROUP BY 1 ORDER BY n DESC`),
+        q(`SELECT COALESCE(SUM(price_kes),0)::float AS kes
+           FROM events WHERE event_type = 'payment_success'`),
+      ]);
+    res.json({
+      users: users[0]?.n || 0,
+      payment_success: payments[0]?.n || 0,
+      payment_failed: fails[0]?.n || 0,
+      watch_complete: watches[0]?.n || 0,
+      revenue_kes: revenue[0]?.kes || 0,
+      events_by_type: events,
+      sessions_by_state: sessions,
+      nudges,
+      dropoffs,
+    });
+  } catch (e) {
+    console.error('admin summary', e);
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/admin/events', requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const { rows } = await pool.query(
+      `SELECT e.id, e.ts, e.event_type, e.user_id, u.name, u.phone, e.session_id,
+              e.movie_title, e.genre, e.price_kes, e.failure_reason
+       FROM events e
+       LEFT JOIN users u ON u.user_id = e.user_id
+       ORDER BY e.ts DESC
+       LIMIT $1`,
+      [limit]
+    );
+    res.json({ events: rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/admin/payments', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.id, e.ts, e.event_type, e.user_id, u.name, u.phone, e.session_id,
+              e.movie_id, e.movie_title, e.price_kes, e.failure_reason
+       FROM events e
+       LEFT JOIN users u ON u.user_id = e.user_id
+       WHERE e.event_type IN ('payment_success','payment_failed','checkout_start')
+       ORDER BY e.ts DESC
+       LIMIT 100`
+    );
+    res.json({ payments: rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/admin/followups', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.session_id, s.user_id, u.name, u.phone, u.email, s.state, s.recovered,
+              s.nudge_count, s.last_activity, s.last_movie_title, s.last_genre, s.last_price,
+              ROUND(EXTRACT(EPOCH FROM (NOW() - s.last_activity))/60)::int AS idle_minutes
+       FROM sessions s
+       JOIN users u ON u.user_id = s.user_id
+       WHERE s.recovered = false
+         AND s.state IN ('browsing','checkout','failed')
+       ORDER BY s.last_activity ASC
+       LIMIT 50`
+    );
+    res.json({ candidates: rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/admin/nudges', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT n.id, n.sent_at, n.scenario, n.channel, n.converted, n.user_id,
+              u.name, u.phone, n.session_id, LEFT(n.message, 160) AS message
+       FROM nudges n
+       LEFT JOIN users u ON u.user_id = n.user_id
+       ORDER BY n.sent_at DESC
+       LIMIT 80`
+    );
+    res.json({ nudges: rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+/** Manual follow-up SMS from admin dashboard */
+app.post('/api/admin/follow-up', requireAdmin, async (req, res) => {
+  try {
+    const {
+      user_id,
+      phone,
+      name,
+      session_id,
+      movie_title,
+      message,
+      scenario,
+    } = req.body || {};
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'phone and message required' });
+    }
+    const to = normalizePhone(phone);
+    const text = String(message).trim();
+    await sendAtSms(to, text);
+
+    const uid = user_id || userIdFromPhone(to);
+    const sid = session_id || 'sess_admin_' + Date.now().toString(36);
+    const scen = scenario || 'admin_followup';
+
+    await pool.query(
+      `INSERT INTO users (user_id, name, phone, last_seen)
+       VALUES ($1,$2,$3,NOW())
+       ON CONFLICT (user_id) DO UPDATE SET
+         name = COALESCE(NULLIF(EXCLUDED.name,''), users.name),
+         phone = COALESCE(NULLIF(EXCLUDED.phone,''), users.phone),
+         last_seen = NOW()`,
+      [uid, name || '', to]
+    );
+    await pool.query(
+      `INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)
+       VALUES ($1,$2,$3,'sms',$4,NOW())`,
+      [uid, sid, scen, text]
+    );
+    await pool.query(
+      `UPDATE sessions SET nudge_count = nudge_count + 1, last_nudge_at = NOW()
+       WHERE session_id = $1`,
+      [sid]
+    ).catch(() => {});
+
+    res.json({
+      ok: true,
+      sent_to: to,
+      movie_title: movie_title || null,
+      scenario: scen,
+    });
+  } catch (e) {
+    console.error('admin follow-up', e);
+    res.status(502).json({ error: String(e.message || e) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(
-    `paystack-api on :${PORT} | configured=${Boolean(PAYSTACK_SECRET_KEY && PAYSTACK_PUBLIC_KEY)} | n8n=${N8N_EVENT_WEBHOOK}`
+    `paystack-api on :${PORT} | paystack=${Boolean(PAYSTACK_SECRET_KEY && PAYSTACK_PUBLIC_KEY)} | at_sms=${Boolean(AT_API_KEY && AT_USERNAME)} | n8n=${N8N_EVENT_WEBHOOK}`
   );
 });
