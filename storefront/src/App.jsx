@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import ConfigBar from './components/ConfigBar';
 import Header from './components/Header';
 import RequireAuth from './components/RequireAuth';
+import ScrollToTop from './components/ScrollToTop';
 import CheckoutPage from './pages/CheckoutPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -15,7 +16,8 @@ export default function App() {
   const hideChrome = location.pathname.startsWith('/login');
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" id="top">
+      <ScrollToTop />
       {!hideChrome ? <Header query={query} onQueryChange={setQuery} /> : null}
       <Routes>
         <Route
