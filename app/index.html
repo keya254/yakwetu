@@ -3,114 +3,265 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Yakwetu — African Stories, Streamed</title>
+<title>Yakwetu — Watch Kenyan Stories</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0e0e14;--panel:#17171f;--gold:#e8b54a;--text:#f5f0e6;--muted:#9a94a8;--green:#3ddc84;--red:#ff5c5c}
-  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
-  body{background:var(--bg);color:var(--text);min-height:100vh}
-  header{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid #23232e}
-  .logo{font-size:26px;font-weight:800;letter-spacing:4px;color:var(--gold)}
-  .logo span{color:var(--text);font-weight:300}
-  nav a{color:var(--muted);text-decoration:none;margin-left:24px;font-size:14px}
+  :root{
+    --bg:#08080c; --panel:#12121a; --line:#242430;
+    --gold:#e8b54a; --text:#f4f0e8; --muted:#9b95a6;
+    --danger:#ff5c5c;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh;padding-bottom:80px}
+  a{color:inherit;text-decoration:none}
+
+  header{
+    position:sticky;top:0;z-index:30;
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    padding:14px 4vw;
+    background:linear-gradient(180deg,rgba(8,8,12,.96),rgba(8,8,12,.75));
+    backdrop-filter:blur(10px);border-bottom:1px solid transparent;
+  }
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:3px;color:var(--gold)}
+  .logo span{color:var(--text);font-weight:400;letter-spacing:2px;font-size:22px}
+  nav{display:flex;gap:16px;align-items:center;margin-left:auto}
+  nav a{color:var(--muted);font-size:13px;font-weight:500}
   nav a:hover{color:var(--gold)}
-  .hero{padding:56px 40px 24px}
-  .hero h1{font-size:38px;max-width:640px;line-height:1.2}
-  .hero h1 em{color:var(--gold);font-style:normal}
-  .hero p{color:var(--muted);margin-top:12px;max-width:520px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:22px;padding:32px 40px 80px}
-  .card{background:var(--panel);border-radius:14px;overflow:hidden;border:1px solid #23232e;transition:transform .2s,border-color .2s;cursor:pointer}
-  .card:hover{transform:translateY(-4px);border-color:var(--gold)}
-  .poster{height:150px;display:flex;align-items:center;justify-content:center;font-size:44px}
-  .meta{padding:16px}
-  .meta h3{font-size:16px;margin-bottom:4px}
-  .meta .genre{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px}
-  .meta .row{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
-  .price{color:var(--gold);font-weight:700}
-  .buy{background:var(--gold);color:#0e0e14;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px}
-  .buy:hover{filter:brightness(1.1)}
-  /* settings bar */
-  .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid #23232e;padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);z-index:10}
-  .cfg input{background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;width:320px}
-  .cfg button{background:#2c2c3a;color:var(--text);border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
-  .cfg .ok{color:var(--green)} .cfg .err{color:var(--red)}
-  #toast{position:fixed;top:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:20}
-  .t{background:#1c1c26;border-left:3px solid var(--gold);padding:10px 16px;border-radius:8px;font-size:13px;max-width:320px;animation:slide .3s}
-  .t.err{border-left-color:var(--red)}
-  @keyframes slide{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+  .search-wrap{flex:1;min-width:200px;max-width:420px;position:relative}
+  .search-wrap input{
+    width:100%;background:#16161f;border:1px solid var(--line);color:var(--text);
+    border-radius:999px;padding:10px 16px 10px 40px;font-size:14px;
+  }
+  .search-wrap::before{content:'⌕';position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px}
+
+  .hero{
+    position:relative;min-height:72vh;display:flex;align-items:flex-end;
+    padding:0 4vw 56px;overflow:hidden;
+    background:#0c0c12;
+  }
+  .hero-bg{
+    position:absolute;inset:0;
+    background:
+      radial-gradient(ellipse 80% 60% at 70% 40%, color-mix(in srgb, var(--hero-bg) 55%, transparent), transparent 70%),
+      linear-gradient(90deg,#08080c 12%, transparent 55%),
+      linear-gradient(0deg,#08080c 8%, transparent 45%),
+      var(--hero-bg);
+  }
+  .hero-emoji{position:absolute;right:8%;top:18%;font-size:clamp(80px,16vw,180px);opacity:.35;filter:drop-shadow(0 20px 40px #000)}
+  .hero-copy{position:relative;z-index:2;max-width:560px}
+  .brand-mark{font-family:'Bebas Neue',sans-serif;font-size:clamp(48px,10vw,92px);line-height:.9;letter-spacing:2px;color:var(--gold);margin-bottom:10px}
+  .hero h2{font-size:clamp(26px,4vw,40px);line-height:1.15;margin-bottom:10px}
+  .hero .meta{color:var(--muted);font-size:13px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap}
+  .hero p{color:#d8d2c6;font-size:15px;line-height:1.5;margin-bottom:18px}
+  .cta{display:flex;gap:10px;flex-wrap:wrap}
+  .cta button,.cta a.btn{
+    border:none;border-radius:6px;padding:12px 20px;font-weight:700;font-size:14px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .cta .primary{background:var(--gold);color:#120e08}
+  .cta .ghost{background:rgba(255,255,255,.12);color:var(--text)}
+
+  .rows{padding:8px 0 40px}
+  .row{margin:22px 0}
+  .row-head{display:flex;justify-content:space-between;align-items:baseline;padding:0 4vw 10px}
+  .row-head h3{font-size:18px;font-weight:700}
+  .row-head span{color:var(--muted);font-size:12px}
+  .scroller{
+    display:flex;gap:12px;overflow-x:auto;padding:4px 4vw 12px;
+    scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+  }
+  .scroller::-webkit-scrollbar{height:6px}
+  .scroller::-webkit-scrollbar-thumb{background:#333;border-radius:99px}
+
+  .tile{
+    flex:0 0 170px;scroll-snap-align:start;cursor:pointer;
+    background:var(--panel);border-radius:8px;overflow:hidden;
+    border:1px solid transparent;transition:transform .2s,border-color .2s;
+  }
+  .tile:hover{transform:translateY(-4px) scale(1.03);border-color:var(--gold);z-index:2}
+  .tile .art{
+    height:240px;display:flex;align-items:flex-end;justify-content:center;
+    padding:16px;font-size:56px;position:relative;
+  }
+  .tile .art::after{
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.75));
+  }
+  .tile .info{padding:10px 12px 14px}
+  .tile h4{font-size:14px;line-height:1.25;margin-bottom:4px}
+  .tile .g{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .tile .price{color:var(--gold);font-size:13px;font-weight:700;margin-top:8px}
+
+  .empty{padding:40px 4vw;color:var(--muted)}
+  .cfg{position:fixed;bottom:0;left:0;right:0;background:#0d0d12;border-top:1px solid var(--line);padding:8px 16px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);z-index:40;flex-wrap:wrap}
+  .cfg input{background:#16161f;border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:6px;width:240px}
+  .cfg button{background:#2a2a36;color:var(--text);border:none;padding:6px 12px;border-radius:6px;cursor:pointer}
+  #toast{position:fixed;top:70px;right:16px;z-index:50;display:flex;flex-direction:column;gap:8px}
+  .t{background:#16161f;border-left:3px solid var(--gold);padding:10px 14px;border-radius:8px;font-size:13px;max-width:300px}
+  .t.err{border-left-color:var(--danger)}
 </style>
 </head>
 <body>
 <header>
-  <div class="logo">YAKWETU<span>·stream</span></div>
+  <a class="logo" href="index.html">YAKWETU<span> STREAM</span></a>
+  <div class="search-wrap">
+    <input id="q" type="search" placeholder="Search titles, genres…" autocomplete="off">
+  </div>
   <nav>
-    <a href="index.html">Browse</a>
+    <a href="index.html">Home</a>
     <a href="demo-lab.html">Demo Lab</a>
     <a href="admin.html">Admin</a>
     <a href="#" id="logoutBtn">Log out</a>
   </nav>
 </header>
 
-<div class="hero">
-  <h1>African stories, <em>owned by you.</em> No subscription — buy what you love.</h1>
-  <p>Buy with Paystack / M-Pesa. Failures and finishes trigger live SMS from n8n (rescue + recommendations).</p>
-</div>
+<section class="hero" id="hero">
+  <div class="hero-bg" id="heroBg"></div>
+  <div class="hero-emoji" id="heroEmoji">🎬</div>
+  <div class="hero-copy">
+    <div class="brand-mark">YAKWETU</div>
+    <h2 id="heroTitle">—</h2>
+    <div class="meta" id="heroMeta"></div>
+    <p id="heroBlurb"></p>
+    <div class="cta">
+      <button class="primary" type="button" id="heroBuy">Buy &amp; watch</button>
+      <button class="ghost" type="button" id="heroBrowse">More info</button>
+    </div>
+  </div>
+</section>
 
-<div class="grid" id="grid"></div>
+<section class="rows" id="rows"></section>
+<p class="empty" id="empty" style="display:none">No titles match your search.</p>
 
 <div class="cfg">
   <span>Events →</span>
-  <input id="whBase" placeholder="leave blank = /api/events (live n8n)">
-  <button onclick="saveCfg()">Save</button>
+  <input id="whBase" placeholder="leave blank = /api/events">
+  <button type="button" onclick="saveCfg()">Save</button>
   <span id="cfgStatus"></span>
-  <span style="margin-left:auto">viewer: <b id="who"></b></span>
+  <span style="margin-left:auto" id="who"></span>
 </div>
 <div id="toast"></div>
 
 <script src="shared.js"></script>
+<script src="catalog.js"></script>
 <script>
-const MOVIES = [
-  {id:'nairobi-nights', title:'Nairobi Nights', genre:'Crime Drama', price:150, emoji:'🌃', bg:'#2b1e3f'},
-  {id:'sauti-ya-mtaa', title:'Sauti ya Mtaa', genre:'Music Drama', price:120, emoji:'🎤', bg:'#3f1e2e'},
-  {id:'katana', title:'Katana', genre:'Coastal Thriller', price:140, emoji:'🗡️', bg:'#1e3f38'},
-  {id:'matatu-diaries', title:'The Matatu Diaries', genre:'Comedy', price:100, emoji:'🚌', bg:'#3f341e'},
-  {id:'kifaru', title:'Kifaru', genre:'Wildlife Doc', price:130, emoji:'🦏', bg:'#263f1e'},
-  {id:'dhahabu', title:'Dhahabu', genre:'Romance', price:110, emoji:'💛', bg:'#3f2a1e'},
-  {id:'wazi', title:'Wazi', genre:'Psych Thriller', price:140, emoji:'🌀', bg:'#1e2a3f'},
-  {id:'baraka', title:'Baraka ya Bibi', genre:'Family Drama', price:115, emoji:'🏠', bg:'#331e3f'},
-];
+let featured = CATALOG[0];
+let heroTimer = null;
 
-const grid = document.getElementById('grid');
-MOVIES.forEach(m => {
-  const el = document.createElement('div');
-  el.className = 'card';
-  el.innerHTML = `
-    <div class="poster" style="background:${m.bg}">${m.emoji}</div>
-    <div class="meta">
-      <h3>${m.title}</h3>
-      <div class="genre">${m.genre}</div>
-  <div class="row"><span class="price">KES ${m.price}</span>
-    <span style="display:flex;gap:8px">
-      <button class="buy" data-act="buy">Buy</button>
-    </span>
-  </div>
-    </div>`;
-  el.querySelector('.poster').onclick = () => viewMovie(m);
-  el.querySelector('.meta h3').onclick = () => viewMovie(m);
-  el.querySelector('.buy').onclick = (e) => { e.stopPropagation(); buyMovie(m); };
-  grid.appendChild(el);
-});
-
-function viewMovie(m){
-  track('browse', m);
-  toast(`👁 Browsing “${m.title}” — event sent`);
+function tileHtml(m){
+  return `<article class="tile" data-id="${m.id}">
+    <div class="art" style="background:${m.bg}">${m.emoji}</div>
+    <div class="info">
+      <h4>${m.title}</h4>
+      <div class="g">${m.genre} · ${m.year || ''}</div>
+      <div class="price">KES ${m.price}</div>
+    </div>
+  </article>`;
 }
+
+function setHero(m){
+  featured = m;
+  document.getElementById('hero').style.setProperty('--hero-bg', m.bg);
+  document.getElementById('heroEmoji').textContent = m.emoji;
+  document.getElementById('heroTitle').textContent = m.title;
+  document.getElementById('heroMeta').innerHTML =
+    `<span>${m.genre}</span><span>${m.year || ''}</span><span>KES ${m.price}</span>`;
+  document.getElementById('heroBlurb').textContent = m.blurb || '';
+}
+
 function buyMovie(m){
   track('browse', m);
   track('checkout_start', m);
-  const q = new URLSearchParams({m:m.id, title:m.title, genre:m.genre, price:m.price});
+  const q = new URLSearchParams({
+    m: m.id, title: m.title, genre: m.genre, price: m.price, year: m.year || ''
+  });
   location.href = 'checkout.html?' + q.toString();
 }
-document.getElementById('who').textContent = USER.name;
+
+function viewMovie(m){
+  track('browse', m);
+  setHero(m);
+  toast('Browsing “' + m.title + '”');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('heroBuy').onclick = () => buyMovie(featured);
+document.getElementById('heroBrowse').onclick = () => viewMovie(featured);
+
+function render(list){
+  const rows = document.getElementById('rows');
+  const empty = document.getElementById('empty');
+  rows.innerHTML = '';
+  if (!list.length) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const trending = list.slice().sort((a,b) => (b.year||0)-(a.year||0)).slice(0,14);
+  const blocks = [{ title: 'Trending on Yakwetu', items: trending }];
+
+  const genreOrder = [
+    'Crime Drama','Crime Thriller','Action Thriller','Thriller','Psych Thriller',
+    'Drama','Romance Drama','Romance','Comedy','Family Comedy','Comedy Drama',
+    'Horror','Sci-Fi','Wildlife Doc','Nature Doc','Music Drama','Family Drama',
+    'Medical Thriller','Eco Thriller','Action','Satire','Short Drama','Drama Series',
+    'Comedy Thriller','Romance Adventure','Coastal Thriller'
+  ];
+  genreOrder.forEach(g => {
+    const items = list.filter(m => m.genre === g);
+    if (items.length) blocks.push({ title: g, items });
+  });
+  // any leftover genres
+  genresInCatalog().forEach(g => {
+    if (!genreOrder.includes(g)) {
+      const items = list.filter(m => m.genre === g);
+      if (items.length) blocks.push({ title: g, items });
+    }
+  });
+
+  blocks.forEach(b => {
+    const section = document.createElement('section');
+    section.className = 'row';
+    section.innerHTML = `<div class="row-head"><h3>${b.title}</h3><span>${b.items.length} titles</span></div>
+      <div class="scroller">${b.items.map(tileHtml).join('')}</div>`;
+    section.querySelectorAll('.tile').forEach(el => {
+      const m = getMovieById(el.dataset.id);
+      el.onclick = () => viewMovie(m);
+      el.ondblclick = () => buyMovie(m);
+    });
+    rows.appendChild(section);
+  });
+}
+
+function applySearch(){
+  const q = document.getElementById('q').value;
+  const list = searchMovies(q);
+  render(list);
+  if (list[0]) setHero(list[0]);
+}
+
+document.getElementById('q').addEventListener('input', () => {
+  clearTimeout(window.__qT);
+  window.__qT = setTimeout(applySearch, 120);
+});
+
+// rotate featured on home (no active search)
+function startHeroRotate(){
+  clearInterval(heroTimer);
+  heroTimer = setInterval(() => {
+    if (document.getElementById('q').value.trim()) return;
+    const i = Math.floor(Math.random() * CATALOG.length);
+    setHero(CATALOG[i]);
+  }, 9000);
+}
+
+setHero(CATALOG.find(m => m.id === 'nairobi-half-life') || CATALOG[0]);
+render(CATALOG);
+startHeroRotate();
+if (USER) document.getElementById('who').textContent = USER.name + ' · ' + USER.phone;
 </script>
 </body>
 </html>

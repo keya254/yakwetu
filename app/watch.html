@@ -71,13 +71,15 @@
 <div id="toast"></div>
 
 <script src="shared.js"></script>
+<script src="catalog.js"></script>
 <script>
 const p = new URLSearchParams(location.search);
+const fromCatalog = typeof getMovieById === 'function' ? getMovieById(p.get('m') || '') : null;
 const movie = {
-  id: p.get('m') || 'nairobi-nights',
-  title: p.get('title') || 'Nairobi Nights',
-  genre: p.get('genre') || 'Crime Drama',
-  price: Number(p.get('price') || 150)
+  id: p.get('m') || (fromCatalog && fromCatalog.id) || 'nairobi-half-life',
+  title: p.get('title') || (fromCatalog && fromCatalog.title) || 'Nairobi Half Life',
+  genre: p.get('genre') || (fromCatalog && fromCatalog.genre) || 'Crime Drama',
+  price: Number(p.get('price') || (fromCatalog && fromCatalog.price) || 150)
 };
 document.getElementById('title').textContent = movie.title;
 document.getElementById('genre').textContent = movie.genre;
