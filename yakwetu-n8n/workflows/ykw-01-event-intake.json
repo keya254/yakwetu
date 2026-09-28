@@ -154,6 +154,52 @@
               },
               "renameOutput": true,
               "outputKey": "demo_abandon"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "r-pay-fail",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "payment_failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "payment_failed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "r-watch",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "watch_complete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "watch_complete"
             }
           ]
         },
@@ -327,6 +373,68 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://127.0.0.1:5678/webhook/yakwetu-payment-rescue",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Normalize & Validate').first().json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a11a-call-03",
+      "name": "Call Payment Rescue (YKW-03)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        520
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://127.0.0.1:5678/webhook/yakwetu-watch-upsell",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Normalize & Validate').first().json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a11a-call-04",
+      "name": "Call Watch Upsell (YKW-04)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        640
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -414,6 +522,20 @@
         ],
         [
           {
+            "node": "Call Payment Rescue (YKW-03)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Watch Upsell (YKW-04)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Build OK Response",
             "type": "main",
             "index": 0
@@ -477,6 +599,28 @@
       ]
     },
     "Log Payment SMS": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Payment Rescue (YKW-03)": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Watch Upsell (YKW-04)": {
       "main": [
         [
           {

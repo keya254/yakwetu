@@ -1,5 +1,5 @@
 {
-  "name": "YKW 03 — Payment Failure Rescue",
+  "name": "YKW 03 \u2014 Payment Failure Rescue",
   "nodes": [
     {
       "parameters": {},
@@ -9,6 +9,36 @@
       "typeVersion": 1,
       "position": [
         240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "yakwetu-payment-rescue",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a11a-ykw03-webhook",
+      "name": "Demo Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        520
+      ],
+      "webhookId": "yakwetu-payment-rescue"
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.body !== undefined ? $json.body : $json;\nif (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (e) { raw = $json; } }\nconst src = raw.body && typeof raw.body === 'object' ? { ...raw, ...raw.body } : raw;\nreturn [{ json: {\n  event_type: src.event_type || 'unknown',\n  user_id: String(src.user_id || ''),\n  name: src.name || '',\n  phone: String(src.phone || '').replace(/\\s/g,''),\n  email: src.email || '',\n  session_id: src.session_id || ('sess_' + Date.now()),\n  movie_id: src.movie_id || null,\n  movie_title: src.movie_title || null,\n  genre: src.genre || null,\n  price_kes: src.price_kes || null,\n  failure_reason: src.failure_reason || null,\n  channel_pref: src.channel_pref || 'sms',\n  ts: src.ts || new Date().toISOString()\n}}];"
+      },
+      "id": "a11a-ykw03-normalize",
+      "name": "Normalize Rescue Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
         300
       ]
     },
@@ -68,7 +98,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: 'Pole! Your payment did not go through — no money was lost. Want us to send a fresh M-Pesa prompt?' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:8080').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?resume=${$json.session_id}&retry=1`;\nreturn [{ json: { ...$('Classify Failure').first().json, ai_message: ai.message,\n  full_message: `${ai.message}\\n\\n▶️ Resume payment: ${link}` } }];"
+        "jsCode": "const atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: 'Pole! Your payment did not go through \u2014 no money was lost. Want us to send a fresh M-Pesa prompt?' }; }\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'https://yakwetu.dontire.com').replace(/\\/$/, '');\nconst link = `${storefront}/checkout.html?resume=${$json.session_id}&retry=1`;\nreturn [{ json: { ...$('Classify Failure').first().json, ai_message: ai.message,\n  full_message: `${ai.message}\\n\\n\u25b6\ufe0f Resume payment: ${link}` } }];"
       },
       "id": "a2f485a7-fd9a-4b23-8042-a68a6a221fd8",
       "name": "Build Rescue Message",
@@ -156,7 +186,8 @@
           "id": "1",
           "name": "Yakwetu Postgres"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -257,7 +288,7 @@
             },
             {
               "name": "message",
-              "value": "=Still want {{ $('Classify Failure').first().json.movie_title }}? Use code PONA10 for 10% off — valid tonight only 🎬 {{ $env.STOREFRONT_URL }}/checkout.html?resume={{ $('Classify Failure').first().json.session_id }}"
+              "value": "=Still want {{ $('Classify Failure').first().json.movie_title }}? Use code PONA10 for 10% off \u2014 valid tonight only \ud83c\udfac {{ $env.STOREFRONT_URL }}/checkout.html?resume={{ $('Classify Failure').first().json.session_id }}"
             },
             {
               "name": "from",
@@ -310,7 +341,7 @@
       "main": [
         [
           {
-            "node": "Classify Failure",
+            "node": "Normalize Rescue Input",
             "type": "main",
             "index": 0
           }
@@ -411,6 +442,28 @@
         [
           {
             "node": "Log Incentive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Rescue Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Rescue Input": {
+      "main": [
+        [
+          {
+            "node": "Classify Failure",
             "type": "main",
             "index": 0
           }
