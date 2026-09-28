@@ -8,8 +8,16 @@ import {
 
 const AuthContext = createContext(null);
 
+// VITE_AUTH_DISABLED=true (e.g. in .env.local): browse without the phone/OTP
+// login, as a guest viewer. For local demos when the API on :3001 isn't
+// running. Unset, login works as normal.
+export const AUTH_DISABLED = import.meta.env.VITE_AUTH_DISABLED === 'true';
+const GUEST = { name: 'Guest Viewer', phone: '+254700000000', email: 'guest@yakwetu.demo' };
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => (isAuthed() ? loadUser() : null));
+  const [user, setUser] = useState(() =>
+    isAuthed() ? loadUser() : AUTH_DISABLED ? GUEST : null
+  );
 
   const login = useCallback((u) => {
     const saved = persistUser(u);
@@ -19,7 +27,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     clearAuth();
-    setUser(null);
+    setUser(AUTH_DISABLED ? GUEST : null);
   }, []);
 
   const updateUser = useCallback((patch) => {

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import ConfigBar from './components/ConfigBar';
 import Header from './components/Header';
 import RequireAuth from './components/RequireAuth';
+import { AUTH_DISABLED } from './context/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
 import CheckoutPage from './pages/CheckoutPage';
 import HomePage from './pages/HomePage';
@@ -28,7 +29,7 @@ export default function App() {
             </RequireAuth>
           }
         />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={AUTH_DISABLED ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route
           path="/movie/:id"
           element={
