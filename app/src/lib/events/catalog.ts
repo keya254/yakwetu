@@ -63,9 +63,11 @@ export const EVENTS = {
   "user.signed_out": activity("browser", "Signed out from the account menu."),
 
   // ── Watching a paid film (after the paywall) ──
-  "watch.started": activity("browser", "Owner started the film (Watch now): movieId."),
-  "watch.progress": activity("browser", "Film progress milestone: movieId, progress (0–1), watchedMs."),
-  "watch.completed": activity("server", "Finished a film they own, server-checked (≥30% genuinely watched), once per viewer and film: movieId, watchedMs."),
+  // Planned: owners watching the film itself (a watch page with server-checked completion
+  // lived in commit aed9ecb). For now a purchase ends in confetti and the film goes to My films.
+  "watch.started": activity("browser", "Owner started the film: movieId.", "planned"),
+  "watch.progress": activity("browser", "Film progress milestone: movieId, progress (0–1), watchedMs.", "planned"),
+  "watch.completed": activity("server", "Finished a film they own, server-checked: movieId, watchedMs.", "planned"),
 
   // ── Money ── (server events are written in the same transaction as the payment change)
   "cart.added": commerce("browser", "Added to cart: movieIds, totalKes.", "planned"),

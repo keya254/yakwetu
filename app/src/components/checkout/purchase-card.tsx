@@ -33,8 +33,7 @@ export function PurchaseCard({ movie, state, signedIn, className }: PurchaseCard
           <Check className="size-4" /> In your library
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Since {state.ownedSince?.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
-          {state.completed ? " · watched" : ""}
+          Bought {state.ownedSince?.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}. It&rsquo;s yours to keep.
         </p>
         <div className="mt-5">
           <BuyButton movieId={movie.id} title={movie.title} priceKes={movie.priceKes} signedIn owned variant="card" />

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Loader2, Play } from "lucide-react";
+import { Library, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthDialog } from "@/components/auth/auth-dialog";
 import { ConfettiBurst } from "@/components/checkout/confetti-burst";
@@ -150,9 +150,9 @@ export function BuyButton({ movieId, title, priceKes, signedIn, owned: ownedAtLo
     return (
       <>
         {celebrating && <ConfettiBurst onDone={() => setCelebrating(false)} />}
-        <Button asChild size="lg" className={cn(sizing, "active:scale-[0.97]")}>
-          <Link href={`/watch/${movieId}`}>
-            <Play className="size-4 fill-current" /> Watch now
+        <Button asChild size="lg" variant="secondary" className={cn(sizing, "active:scale-[0.97]")}>
+          <Link href="/my-films">
+            <Library className="size-4" /> In My films
           </Link>
         </Button>
       </>
