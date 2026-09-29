@@ -15,7 +15,8 @@ import { PrismaClient } from "../src/generated/prisma/client";
 
 const base = process.env.RECS_API_URL;
 const key = process.env.RECS_API_KEY;
-const storefrontUrl = (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+// Film links the recommender hands out (SMS nudges): the public address when there is one.
+const storefrontUrl = (process.env.PUBLIC_SITE_URL || process.env.BETTER_AUTH_URL || "http://localhost:3000").replace(/\/+$/, "");
 
 async function recs(path: string, init: RequestInit = {}) {
   const response = await fetch(new URL(path, base), {

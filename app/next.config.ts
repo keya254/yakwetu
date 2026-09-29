@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
+const publicHost = process.env.PUBLIC_SITE_URL ? new URL(process.env.PUBLIC_SITE_URL).hostname : null;
+
 const nextConfig: NextConfig = {
+  ...(publicHost ? { allowedDevOrigins: [publicHost] } : {}),
   // Loaded by Node at runtime rather than bundled: amqplib uses Node's net/tls.
   serverExternalPackages: ["amqplib"],
   images: {

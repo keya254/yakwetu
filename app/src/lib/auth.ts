@@ -7,9 +7,11 @@ import { nextCookies } from "better-auth/next-js";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE_PREFIX } from "@/lib/auth-cookie";
 import { emitServerEvent } from "@/lib/events/server";
+import { publicSiteUrl } from "@/lib/site-url";
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
+  trustedOrigins: [...new Set([process.env.BETTER_AUTH_URL, publicSiteUrl()].filter((origin): origin is string => Boolean(origin)))],
   secret: process.env.BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
 
