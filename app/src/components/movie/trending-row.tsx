@@ -28,6 +28,9 @@ export function TrendingRow({ movies, title = "Trending this week" }: { movies: 
               </span>
               <Link
                 href={`/movie/${movie.id}`}
+                data-track-movie={movie.id}
+                data-track-row={title}
+                data-track-position={index + 1}
                 className="group/trend relative block w-32 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-36"
               >
                 <Poster

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
+import { EventTracker } from "@/components/analytics/event-tracker";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         {children}
         <Toaster position="bottom-right" />
+        <EventTracker />
       </body>
     </html>
   );

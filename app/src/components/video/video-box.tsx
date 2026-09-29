@@ -28,7 +28,7 @@ const AUTOPLAY_GRACE_MS = 1500;
  * Our own player around a YouTube video: YouTube's controls, title bar and
  * end-screen suggestions are hidden, and the box draws its own. That keeps the
  * viewer on the film instead of on YouTube, and puts every play, pause, seek
- * and milestone through one place (`trackVideo`) we can capture later.
+ * and milestone through one place (`trackVideo`), into the event pipeline.
  *
  * Signed-out viewers get the sign-up dialog when they press play; once in,
  * the video starts without a second press.
@@ -121,7 +121,7 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
           for (const milestone of MILESTONES) {
             if (!s.milestones.has(milestone) && (pos / total) * 100 >= milestone) {
               s.milestones.add(milestone);
-              emit("video_progress", { percent: milestone });
+              emit("video.progress", { percent: milestone });
             }
           }
         }
@@ -220,9 +220,9 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
             poke();
             if (!s.started) {
               s.started = true;
-              emit("video_started");
+              emit("video.started");
             } else if (s.wasPaused) {
-              emit("video_resumed");
+              emit("video.resumed");
             }
             s.wasPaused = false;
           } else if (data === PlayerState.BUFFERING) {
@@ -231,11 +231,11 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
             setPhase("paused");
             if (s.started) {
               s.wasPaused = true;
-              emit("video_paused");
+              emit("video.paused");
             }
           } else if (data === PlayerState.ENDED) {
             setPhase("ended");
-            emit("video_completed");
+            emit("video.completed");
             exitFullscreen();
           }
         },
@@ -243,16 +243,16 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
           clearTimeout(autoplayCheck);
           setPhase("error");
           setError({ message: describeYouTubeError(data), retry: false });
-          emit("video_error", { errorCode: data });
+          emit("video.error", { errorCode: data });
         },
       },
     });
   }, [videoId, emit, exitFullscreen, poke]);
 
   function onPlayPressed() {
-    emit("video_play_clicked");
+    emit("video.play_clicked");
     if (!authed) {
-      emit("video_auth_prompted");
+      emit("video.auth_prompted");
       setAuthOpen(true);
       return;
     }
@@ -295,7 +295,7 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
     player.seekTo(to, true);
     session.current.lastPos = to; // a jump, not watching
     setPosition(to);
-    emit("video_seeked", { positionSec: to });
+    emit("video.seeked", { positionSec: to });
   }
 
   function toggleMute() {

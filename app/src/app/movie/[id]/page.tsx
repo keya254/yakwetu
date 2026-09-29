@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Star } from "lucide-react";
+import { MovieViewTracker } from "@/components/analytics/movie-view-tracker";
 import { MovieRow } from "@/components/movie/movie-row";
 import { Poster } from "@/components/movie/poster";
 import { SiteFooter } from "@/components/site-footer";
@@ -33,6 +34,7 @@ export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
   return (
     <>
       <SiteHeader />
+      <MovieViewTracker movieId={movie.id} title={movie.title} priceKes={movie.priceKes} genres={movie.genres} />
       <main className="flex-1 pb-16">
         <section className="relative isolate overflow-hidden border-b border-border">
           {movie.posterUrl && (

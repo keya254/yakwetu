@@ -13,12 +13,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/lib/auth-client";
+import { flushEvents, track } from "@/lib/events/client";
 import { initials } from "@/lib/format";
 
 export function UserMenu({ name, email }: { name: string; email: string }) {
   const router = useRouter();
 
   async function handleSignOut() {
+    // Sent while the session is still valid, so the event carries who signed out.
+    track("user.signed_out");
+    await flushEvents();
     const { error } = await signOut();
     if (error) {
       toast.error("Couldn't sign you out. Try again.");

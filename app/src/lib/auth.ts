@@ -6,6 +6,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE_PREFIX } from "@/lib/auth-cookie";
+import { emitServerEvent } from "@/lib/events/server";
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
@@ -32,6 +33,25 @@ export const auth = betterAuth({
   // its maxAge. One session query per page is cheap; a stale login is not.
   session: {
     expiresIn: 60 * 60 * 24 * 30,
+  },
+
+  // Account events come from the server, where the browser can't block or fake them.
+  // emitServerEvent never throws, so capture can't break signing up or in.
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          await emitServerEvent("user.signed_up", user.id, { method: "email", hasPhone: Boolean(user.phone) });
+        },
+      },
+    },
+    session: {
+      create: {
+        after: async (session) => {
+          await emitServerEvent("user.signed_in", session.userId, { method: "email" });
+        },
+      },
+    },
   },
 
   // Our own cookie names. The default "better-auth.*" collides with any other

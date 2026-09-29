@@ -24,9 +24,9 @@ export function MovieRow({ title, description, movies, action, id }: MovieRowPro
       </div>
       <div className="no-scrollbar mt-4 overflow-x-auto">
         <ul className="mx-auto flex max-w-7xl snap-x gap-4 px-4 pb-2 sm:px-6 lg:px-8">
-          {movies.map((movie) => (
+          {movies.map((movie, index) => (
             <li key={movie.id} className="w-38 shrink-0 snap-start sm:w-46">
-              <MovieCard movie={movie} />
+              <MovieCard movie={movie} track={{ row: title, position: index + 1 }} />
             </li>
           ))}
         </ul>
