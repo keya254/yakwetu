@@ -105,6 +105,8 @@ model Movie {
   imdbRating Float?
   posterUrl  String?
 
+  youtubeId  String?
+
   priceKes     Int     @default(99)
   isNewRelease Boolean @default(false)
   /// Lower is hotter. Curated for now; later derived from recent events.

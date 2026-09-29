@@ -48,6 +48,7 @@ async function main() {
       const listing = {
         imdbId: curated.imdbId,
         priceKes: curated.priceKes,
+        youtubeId: curated.youtubeId,
         featured: curated.featured ?? false,
         trendingRank: rank === -1 ? null : rank + 1,
       };
