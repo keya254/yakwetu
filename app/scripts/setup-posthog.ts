@@ -49,6 +49,10 @@ async function all<T extends { name: string }>(path: string): Promise<T[]> {
 
 const LAST_30 = { date_from: "-30d" };
 const event = (name: string, extra: Json = {}) => ({ kind: "EventsNode", event: name, name, ...extra });
+/** Sum a numeric property (revenue in KES). */
+const sumOf = (name: string, property: string, extra: Json = {}) => event(name, { math: "sum", math_property: property, ...extra });
+const isSet = (key: string) => ({ key, type: "event", operator: "is_set", value: "is_set" });
+const isNot = (key: string, value: unknown) => ({ key, type: "event", operator: "is_not", value: [value] });
 
 function trends(
   series: Json[],
@@ -170,6 +174,36 @@ const DASHBOARDS: { name: string; description: string; insights: InsightSpec[] }
       },
       { name: "Top films by views", description: "The titles people open most.", query: trends([event("movie.viewed")], { breakdown: "movieTitle", display: "ActionsBarValue" }) },
       { name: "Top films by trailer plays", description: "The titles people actually press play on.", query: trends([event("video.started")], { breakdown: "movieTitle", display: "ActionsBarValue" }) },
+    ],
+  },
+  {
+    name: "Yakwetu · Revenue & recovery",
+    description: "Money in, where checkout loses people, why payments fail, and how much the n8n rescue workflows win back.",
+    insights: [
+      {
+        name: "Revenue per day (KES)",
+        description: "Sum of confirmed payments (Paystack-verified), duplicates excluded.",
+        query: trends([sumOf("payment.succeeded", "amountKes", { properties: [isNot("duplicate", true)] })], { display: "ActionsBar" }),
+      },
+      {
+        name: "Checkout funnel: started → submitted → paid",
+        description: "Of checkouts opened, how many reached Paystack and how many were paid. Within 2 hours.",
+        query: funnel([event("checkout.started"), event("payment.submitted"), event("payment.succeeded")], 2),
+      },
+      { name: "Why payments fail", description: "payment.failed by classified reason: insufficient funds, wrong PIN, timeout, limit, declined.", query: trends([event("payment.failed")], { breakdown: "reason", display: "ActionsPie" }) },
+      { name: "Paid by channel", description: "M-Pesa (mobile_money) against card.", query: trends([event("payment.succeeded")], { breakdown: "channel", display: "ActionsPie" }) },
+      {
+        name: "KES recovered per scenario",
+        description: "Revenue from payments made through an n8n nudge link: A abandoned checkout, B payment rescue, C post-watch.",
+        query: trends([sumOf("payment.succeeded", "amountKes", { properties: [isSet("nudgeScenario")] })], { breakdown: "nudgeScenario", display: "ActionsBarValue" }),
+      },
+      {
+        name: "Nudge funnel: sent → opened → paid",
+        description: "SMS sent by n8n, links opened, and payments made through them. Within 24 hours.",
+        query: funnel([event("nudge.sent"), event("nudge.opened"), event("payment.succeeded", { properties: [isSet("nudgeScenario")] })], 24),
+      },
+      { name: "Nudges sent by scenario and step", description: "What the n8n workflows sent: first messages and PONA10 incentives.", query: trends([event("nudge.sent")], { breakdown: "scenario", display: "ActionsBar" }) },
+      { name: "Revenue by genre (KES)", description: "Confirmed revenue by the first film's genre.", query: trends([sumOf("payment.succeeded", "amountKes")], { breakdown: "primaryGenre", display: "ActionsBarValue" }) },
     ],
   },
   {
