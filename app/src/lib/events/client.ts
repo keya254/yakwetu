@@ -47,6 +47,20 @@ function uuid(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/** UUIDv7 (time-ordered): the only session id format PostHog accepts for its session analytics. */
+function uuidv7(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let ms = Date.now();
+  for (let i = 5; i >= 0; i--) {
+    bytes[i] = ms & 0xff;
+    ms = Math.floor(ms / 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function storage(): Storage | null {
   try {
     return window.localStorage;
@@ -77,8 +91,9 @@ function persist(): void {
 function sessionId(): string | undefined {
   try {
     let id = window.sessionStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id = uuid();
+    // A session from before the switch to v7 gets a fresh id.
+    if (!id || id[14] !== "7") {
+      id = uuidv7();
       window.sessionStorage.setItem(SESSION_KEY, id);
     }
     return id;
