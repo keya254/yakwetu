@@ -1,0 +1,470 @@
+{
+  "name": "YKW · Journeys — welcome & first watch (q.n8n.journeys)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "7df4e9e2-261d-48f7-b901-4d408eae65ab",
+      "name": "Note d26c58",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -420
+      ],
+      "parameters": {
+        "content": "## Did a new viewer find a film?\nFed by **q.n8n.journeys**: only business moments, never page views (those go to PostHog in code, not through n8n).\n\n**Sign-up →** wait 10 min → ask the recommender what they've done. Already played a trailer? Done. Otherwise → the recommender picks one film for them → look up their name and phone (Neon, read-only) → write a short SMS → send (Africa's Talking) → record the nudge in PostHog, so the funnel shows whether nudged viewers come back.\n\nThe SMS node is **disabled** until you switch it on: the Africa's Talking account is live, and each message costs airtime.",
+        "width": 520,
+        "height": 360,
+        "color": 4
+      }
+    },
+    {
+      "id": "7a3ef2e8-7daa-4e9a-a52b-b2386189e85c",
+      "name": "Business moments (RabbitMQ)",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "queue": "q.n8n.journeys",
+        "options": {
+          "acknowledge": "executionFinishesSuccessfully",
+          "jsonParseBody": true,
+          "onlyContent": true,
+          "parallelMessages": 5
+        }
+      },
+      "credentials": {
+        "rabbitmq": {
+          "id": "0XUkvX0FdyyHYkKN",
+          "name": "RabbitMQ account"
+        }
+      }
+    },
+    {
+      "id": "c4d10342-567a-4853-ab4b-b731436fbbbf",
+      "name": "Which moment?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 2,
+        "output": "={{ $json.type === 'user.signed_up' ? 0 : 1 }}"
+      }
+    },
+    {
+      "id": "ee06c445-5fe2-4170-894a-5d3cf9050cfb",
+      "name": "Give them 10 minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        -100
+      ],
+      "parameters": {
+        "amount": 10,
+        "unit": "minutes"
+      },
+      "webhookId": "b632db83-fe64-4f9a-ae9e-a28066aa7d92"
+    },
+    {
+      "id": "f20c49e0-af7d-49cf-a552-d8cbc71925f2",
+      "name": "Finished a film (Scenario C, next)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        480,
+        140
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b7982738-0e0e-4d2b-9718-89a8549e46a4",
+      "name": "What have they done? (sinema-recs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        -100
+      ],
+      "parameters": {
+        "url": "={{ 'https://3-226-65-199.sslip.io/v1/viewers/' + encodeURIComponent($('Business moments (RabbitMQ)').item.json.userId) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "Credential: Header Auth 'Sinema recs API': x-api-key = <RECS_API_KEY>",
+      "notesInFlow": true
+    },
+    {
+      "id": "cf79ecd5-fb95-4839-a4d9-b527cdb75700",
+      "name": "Played anything yet?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0d3a6647-8f49-4c9a-a43c-e39f3ba89a72",
+              "leftValue": "={{ ($json.data?.movies ?? []).some((m) => !['none', 'viewed', 'bounce', 'notInterested'].includes(m.engagement?.kind)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "83f86678-297b-428a-b9f0-63f428651286",
+      "name": "Engaged on their own: done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        -240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "19d4d1b7-b276-4bb9-8ae7-f12d3630a136",
+      "name": "Pick one film for them (sinema-recs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'https://3-226-65-199.sslip.io/v1/recs/' + encodeURIComponent($('Business moments (RabbitMQ)').item.json.userId) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "mode",
+              "value": "home"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            },
+            {
+              "name": "log",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Credential: Header Auth 'Sinema recs API'",
+      "notesInFlow": true
+    },
+    {
+      "id": "220c858e-7684-4395-ad76-8fd27be629dc",
+      "name": "Name & phone (Neon, read-only)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT name, phone FROM storefront.\"user\" WHERE id = $1",
+        "options": {
+          "queryReplacement": "={{ $('Business moments (RabbitMQ)').item.json.userId }}"
+        }
+      },
+      "notes": "Credential: Postgres 'Neon read-only' (the n8n_reader role; see the setup guide)",
+      "notesInFlow": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "b94a9b4d-5922-4de8-91db-c57cd2685020",
+      "name": "Write the SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Facts only, under 160 characters: first name, the recommender's pick, a link.\nconst event = $('Business moments (RabbitMQ)').first().json;\nconst pick = $('Pick one film for them (sinema-recs)').first().json.data?.items?.[0];\nconst person = $input.first().json ?? {};\nconst first = (person.name ?? '').trim().split(/\\s+/)[0] || 'there';\nlet message = pick\n  ? `Hi ${first}, welcome to Yakwetu Sinema! Start with ${pick.title} (${(pick.genres ?? [])[0] ?? 'film'}), KES ${pick.priceKes}. Trailer: ${pick.pageUrl}`\n  : `Hi ${first}, welcome to Yakwetu Sinema! Browse Kenyan and African films from KES 49: http://localhost:3000/browse`;\nif (message.length > 160) message = message.slice(0, 157) + '...';\nreturn [{ json: { userId: event.userId, phone: person.phone ?? null, message, movieId: pick?.movieId ?? null, reason: pick?.reason ?? null } }];"
+      }
+    },
+    {
+      "id": "a684aaad-f1d3-4ad1-8283-29f82f86db80",
+      "name": "Has a phone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "91bbdaa1-029c-4ef7-83d5-23242196dd26",
+              "leftValue": "={{ $json.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bcbb892b-db30-4eec-9222-daa31adaf1b2",
+      "name": "Send SMS (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.africastalking.com/version1/messaging",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "africasmsApp"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "from",
+              "value": "AFTKNG"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "disabled": true,
+      "notes": "Disabled on purpose (live account, costs airtime). Credential: Header Auth 'Africa's Talking': apiKey = <AT_API_KEY>",
+      "notesInFlow": true
+    },
+    {
+      "id": "cef3fa5d-ae64-4367-8d81-4ecf388cc0df",
+      "name": "Record the nudge in PostHog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.i.posthog.com/batch/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: '__POSTHOG_PROJECT_TOKEN__', batch: [{ event: 'nudge.prepared', distinct_id: $('Write the SMS').item.json.userId, properties: { journey: 'welcome', movieId: $('Write the SMS').item.json.movieId, reason: $('Write the SMS').item.json.reason, channel: $('Write the SMS').item.json.phone ? 'sms' : 'none', $lib: 'n8n-journeys' } }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Business moments (RabbitMQ)": {
+      "main": [
+        [
+          {
+            "node": "Which moment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which moment?": {
+      "main": [
+        [
+          {
+            "node": "Give them 10 minutes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finished a film (Scenario C, next)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Give them 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "What have they done? (sinema-recs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What have they done? (sinema-recs)": {
+      "main": [
+        [
+          {
+            "node": "Played anything yet?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Played anything yet?": {
+      "main": [
+        [
+          {
+            "node": "Engaged on their own: done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pick one film for them (sinema-recs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick one film for them (sinema-recs)": {
+      "main": [
+        [
+          {
+            "node": "Name & phone (Neon, read-only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Name & phone (Neon, read-only)": {
+      "main": [
+        [
+          {
+            "node": "Write the SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the SMS": {
+      "main": [
+        [
+          {
+            "node": "Has a phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has a phone?": {
+      "main": [
+        [
+          {
+            "node": "Send SMS (Africa's Talking)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record the nudge in PostHog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Africa's Talking)": {
+      "main": [
+        [
+          {
+            "node": "Record the nudge in PostHog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

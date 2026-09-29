@@ -43,3 +43,7 @@ next-env.d.ts
 
 # generated Prisma client (pnpm db:generate)
 /src/generated
+
+# Generated n8n workflows carry the PostHog project token: never commit them.
+# The shareable copies (no keys) live in ../yakwetu-n8n/workflows/v2/.
+/n8n/

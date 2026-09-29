@@ -1,6 +1,7 @@
 /**
- * Writes the Yakwetu n8n workflows to n8n/workflows/*.json (importable in
- * n8n: Workflows → Import from file). They're generated from code so the
+ * Writes the Yakwetu n8n workflows: importable copies to n8n/workflows/
+ * (git-ignored, they carry the PostHog project token) and shareable copies,
+ * token replaced by a placeholder, to ../yakwetu-n8n/workflows/v2/. They're generated from code so the
  * logic is reviewable, diffable and rebuilt the same way every time.
  *
  *   pnpm n8n:build
@@ -386,10 +387,22 @@ return [{ json: { userId: event.userId, phone: person.phone ?? null, message, mo
 };
 
 
+/** Placeholder the shareable copies carry instead of the PostHog project token. */
+const TOKEN_PLACEHOLDER = "__POSTHOG_PROJECT_TOKEN__";
+
+/**
+ * Two outputs:
+ * - n8n/workflows/          ready to import, with the PostHog project token filled in.
+ *                           Git-ignored: it never reaches GitHub.
+ * - ../yakwetu-n8n/workflows/v2/   the same workflows with the token replaced by
+ *                           __POSTHOG_PROJECT_TOKEN__. Safe to commit and share.
+ */
 function main() {
   if (!PROJECT_ID || !PROJECT_TOKEN) throw new Error("Set PROJECT_ID and POSTHOG_KEY in .env");
   const dir = join(process.cwd(), "n8n", "workflows");
+  const shareDir = join(process.cwd(), "..", "yakwetu-n8n", "workflows", "v2");
   mkdirSync(dir, { recursive: true });
+  mkdirSync(shareDir, { recursive: true });
   const v2 = buildV2({
     site: SITE,
     recs: RECS,
@@ -407,9 +420,14 @@ function main() {
     ["journeys", journeys],
     ...v2,
   ] as [string, { name: string; nodes: unknown[] }][]) {
-    writeFileSync(join(dir, `${file}.json`), `${JSON.stringify(workflow, null, 2)}\n`);
-    console.log(`✓ n8n/workflows/${file}.json · ${workflow.nodes.length} nodes · ${workflow.name}`);
+    const json = `${JSON.stringify(workflow, null, 2)}\n`;
+    writeFileSync(join(dir, `${file}.json`), json);
+    const shareable = json.split(PROJECT_TOKEN).join(TOKEN_PLACEHOLDER);
+    if (/phc_[A-Za-z0-9]{20,}|phx_|sk_(test|live)_|atsk_/.test(shareable)) throw new Error(`${file}: a key is still in the shareable copy`);
+    writeFileSync(join(shareDir, `${file}.json`), shareable);
+    console.log(`✓ ${file}.json · ${workflow.nodes.length} nodes · ${workflow.name}`);
   }
+  console.log(`\nImportable (git-ignored): n8n/workflows/\nShareable (no keys):      ../yakwetu-n8n/workflows/v2/`);
 }
 
 main();

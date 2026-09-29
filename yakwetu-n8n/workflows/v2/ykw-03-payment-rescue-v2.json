@@ -1,0 +1,1057 @@
+{
+  "name": "YKW 03 — Payment Failure Rescue · v2 (RabbitMQ)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "d5b31dfe-b91e-422e-91dc-b253c15d1aee",
+      "name": "Note 6f7fbd",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -500
+      ],
+      "parameters": {
+        "content": "## YKW 03 v2: Payment failure rescue\nThe storefront team's scenario (failure classes, \"Pole\" tone, PONA10) on our plumbing:\n\n- **RabbitMQ** `q.n8n.payment-failed`: the storefront publishes `payment.failed` only after Paystack verify said so. No webhook, no polling.\n- **Paystack verify again** first: M-Pesa often settles late. Paid? Stop. Never tell a payer it failed.\n- **Send window** 07:00–21:00 Nairobi (held, not dropped, outside it).\n- **Signed resume link** to the *same* order (one use, 24 h); caps (2 per order, 20 per viewer/day) enforced by the storefront.\n- **AI copy** (gpt-4o-mini) from facts only, **checked by code**: too long, a link, or a wrong price → their template instead.\n- Still unpaid after 2 min (demo; 2 h live) → one **PONA10** (10%, 1 h). Paying through either link credits *KES recovered · B*.",
+        "width": 560,
+        "height": 400,
+        "color": 4
+      }
+    },
+    {
+      "id": "c758ac3c-2983-4b47-8617-724b7cc3c74c",
+      "name": "Payment failed (RabbitMQ)",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "queue": "q.n8n.payment-failed",
+        "options": {
+          "acknowledge": "executionFinishesSuccessfully",
+          "jsonParseBody": true,
+          "onlyContent": true,
+          "parallelMessages": 5
+        }
+      },
+      "credentials": {
+        "rabbitmq": {
+          "id": "0XUkvX0FdyyHYkKN",
+          "name": "RabbitMQ account"
+        }
+      }
+    },
+    {
+      "id": "962d910d-fce0-4459-b45b-9d61fb7c9376",
+      "name": "Paid after all? (Paystack verify)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'https://api.paystack.co/transaction/verify/' + encodeURIComponent($json.properties.reference) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "bYa7w7Nx6KOyl0Zr",
+          "name": "Paystack secret"
+        }
+      }
+    },
+    {
+      "id": "c8a07e57-d6be-4e80-90fb-00961bf3c8f9",
+      "name": "Settled after all?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e54c1f58-ab44-43cd-9a34-cef102c91cb0",
+              "leftValue": "={{ $json.data?.status === 'success' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4a0f4712-32c1-4536-ae13-077a3f4bb60f",
+      "name": "Paid: no message",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ba15cf8c-8e2d-41bb-854c-d692570bde92",
+      "name": "Order & viewer (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        60
+      ],
+      "parameters": {
+        "url": "={{ 'https://a234-105-163-1-93.ngrok-free.app/api/internal/orders/' + $('Payment failed (RabbitMQ)').item.json.properties.orderId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8xVhWQpGmgkd32mG",
+          "name": "Yakwetu Internal Api Key"
+        }
+      }
+    },
+    {
+      "id": "fdee593e-d736-4dd2-b2c3-12c3773033ad",
+      "name": "Worth a message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "86fa8142-837a-4fff-9889-0940412d4c26",
+              "leftValue": "={{ !$json.order.paid && !$json.ownsAll && Boolean($json.user?.phone) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d74eab47-43ce-41e9-a2e5-e0721f4dabea",
+      "name": "Nothing to send",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        220
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "76fb9531-88e3-4ff6-aab4-b14e124c7109",
+      "name": "Send window (07:00–21:00)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "const OPEN = 7;\nconst CLOSE = 21;\nconst now = new Date();\nconst parts = Object.fromEntries(new Intl.DateTimeFormat(\"en-GB\", { timeZone: \"Africa/Nairobi\", hour: \"numeric\", minute: \"numeric\", hourCycle: \"h23\" })\n    .formatToParts(now)\n    .map((part) => [part.type, part.value]));\nconst hour = Number(parts.hour) + Number(parts.minute) / 60;\nlet waitMinutes = 0;\nif (hour < OPEN)\n    waitMinutes = Math.ceil((OPEN - hour) * 60);\nelse if (hour >= CLOSE)\n    waitMinutes = Math.ceil((24 - hour + OPEN) * 60);\nreturn [\n    {\n        json: {\n            ...$input.first().json,\n            sendWindow: `${OPEN}:00–${CLOSE}:00 Nairobi`,\n            holdUntilWindow: waitMinutes > 0,\n            waitMinutes,\n            sendAt: new Date(now.getTime() + waitMinutes * 60_000).toISOString(),\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "49ec16a0-8900-496c-a134-8ea1b7e26349",
+      "name": "Outside the window?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b6ce97a-4840-4b45-8c5a-7150a0014705",
+              "leftValue": "={{ $json.holdUntilWindow }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1c4a4ba1-2c68-47da-9851-2938bf26ad04",
+      "name": "Hold until the window opens",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        -160
+      ],
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $json.sendAt }}"
+      },
+      "webhookId": "0897fe70-9938-42d9-ad0c-e36786a80124"
+    },
+    {
+      "id": "6fe739cd-f4f7-442a-8170-4a4dfa7ccc40",
+      "name": "Resume link (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://a234-105-163-1-93.ngrok-free.app/api/internal/nudges",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $('Order & viewer (storefront)').item.json.user.id, scenario: 'B', step: 'first', movieIds: $('Order & viewer (storefront)').item.json.order.movieIds, orderId: $('Order & viewer (storefront)').item.json.order.id, discountPct: 0, ttlMinutes: 1440 }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8xVhWQpGmgkd32mG",
+          "name": "Yakwetu Internal Api Key"
+        }
+      }
+    },
+    {
+      "id": "425edf69-b996-4c64-86a5-cf4826476dc4",
+      "name": "Link created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7f6fd5a2-9921-409b-a915-1ab3db5d6d1f",
+              "leftValue": "={{ $json.status === 'created' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1988a6f5-902a-4ea7-b0d8-f2f7be8783d7",
+      "name": "Capped or not needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        140
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ab513e8f-2f31-47a5-87a3-73f3a8d1ac4f",
+      "name": "Rescue facts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const failed = $(\"Payment failed (RabbitMQ)\").first().json;\nconst info = $(\"Order & viewer (storefront)\").first().json;\nconst link = $(\"Resume link (storefront)\").first().json;\nconst reason = failed.properties.reason ?? \"declined\";\nconst strategies = {\n    insufficient_funds: \"top up M-Pesa and finish; the film is saved for them\",\n    wrong_pin: \"the PIN didn't match; try again, it takes seconds\",\n    timeout_or_cancel: \"the M-Pesa prompt timed out; try again when the phone is ready\",\n    limit_exceeded: \"it went over the M-Pesa limit; pay by card or Till instead\",\n    declined: \"the payment was declined; try again or use another way to pay\",\n};\nconst first = info.user.firstName;\nconst title = link.films.map((film) => film.title).join(\" + \");\nconst fallbacks = {\n    insufficient_funds: `Pole ${first}, your M-Pesa balance was short for ${title} (KES ${link.totalKes}). Top up and tap to finish, it's saved:`,\n    wrong_pin: `Pole ${first}, the M-Pesa PIN didn't go through for ${title}. Tap to try again:`,\n    timeout_or_cancel: `Pole ${first}, the M-Pesa prompt for ${title} timed out. Tap when your phone's ready:`,\n    limit_exceeded: `Pole ${first}, ${title} went over your M-Pesa limit. Tap to pay by card or Till:`,\n};\nreturn [\n    {\n        json: {\n            userId: info.user.id,\n            orderId: info.order.id,\n            phone: info.user.phone,\n            firstName: first,\n            title,\n            reason,\n            strategy: strategies[reason] ?? strategies.declined,\n            totalKes: link.totalKes,\n            url: link.url,\n            nudgeId: link.nudgeId,\n            movieIds: link.films.map((film) => film.id),\n            discountPct: link.discountPct,\n            // Every message offers one alternative way to pay (the brief), after the resume link.\n            alternative: reason === \"limit_exceeded\" ? \"\" : \" Or pay by card.\",\n            fallback: fallbacks[reason] ?? `Pole ${first}, your payment for ${title} didn't go through. Tap to try again:`,\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "551c855c-b1c2-48a2-861b-c2c4015b688b",
+      "name": "AI: troubleshooting copy",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        2640,
+        -100
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=First name: {{ $json.firstName }}\nFilm: {{ $json.title }}\nWhat went wrong: {{ $json.reason }}\nWhat to suggest: {{ $json.strategy }}\nPrice: KES {{ $json.totalKes }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You write one SMS for a viewer whose payment for a film just failed on Yakwetu Sinema, a Kenyan pay-per-film store. Help them finish. Rules: at most 110 characters. Warm, plain Kenyan English (a little Swahili like 'Pole' or 'Karibu' is fine). Use only the facts given: never invent a film, price, discount or deadline. Mention the price only if given, exactly as given. No links, no emojis, no hashtags; the link is added after your message. End so the link reads naturally after it (e.g. end with 'Tap:' or 'here:')."
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Credential: attach your OpenAI credential on the model below (gpt-4o-mini).",
+      "notesInFlow": true
+    },
+    {
+      "id": "885088ad-663b-49fc-94db-55cbb90706e9",
+      "name": "AI: troubleshooting copy · model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2600,
+        100
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 120,
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "e1248245-7227-44cc-a918-b73f9584b0a8",
+      "name": "AI: troubleshooting copy · parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2780,
+        100
+      ],
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\n  \"message\": \"Pole Wanjiku, the M-Pesa prompt for Supa Modo timed out. Tap when your phone's ready:\"\n}"
+      }
+    },
+    {
+      "id": "5efd71b6-e0e4-4412-b029-cab6c3ee51a1",
+      "name": "Guard the copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const facts = $(\"Rescue facts\").first().json;\nconst ai = $input.first().json ?? {};\nconst text = String(ai.output?.message ?? ai.text ?? \"\").trim();\nlet fallbackReason = null;\nif (!text)\n    fallbackReason = ai.error ? \"AI error\" : \"no AI answer\";\nelse if (text.length > 120)\n    fallbackReason = \"too long\";\nelse if (/https?:|www\\.|\\.com|\\.app/i.test(text))\n    fallbackReason = \"contains a link\";\nelse {\n    const prices = [...text.matchAll(/KES\\s?([\\d,]+)/gi)].map((match) => Number(match[1].replace(/,/g, \"\")));\n    if (prices.some((price) => price !== facts.totalKes))\n        fallbackReason = \"wrong price\";\n}\nconst body = fallbackReason ? facts.fallback : text;\nreturn [{ json: { ...facts, message: `${body} ${facts.url}${facts.alternative}`.trim(), aiUsed: !fallbackReason, fallbackReason } }];"
+      }
+    },
+    {
+      "id": "53a094c0-0f46-4fb5-89fd-8fef609a1321",
+      "name": "Send rescue SMS (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.africastalking.com/version1/messaging",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "africasmsApp"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "from",
+              "value": "AFTKNG"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YQE2SdNTmX1gcmbM",
+          "name": "Africastalking API KEY"
+        }
+      }
+    },
+    {
+      "id": "6de7ff9b-c9cd-4d6f-b820-d295ccc5cbee",
+      "name": "Record: rescue sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.i.posthog.com/batch/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: '__POSTHOG_PROJECT_TOKEN__', batch: [{ event: 'nudge.sent', distinct_id: $json.userId, properties: { scenario: 'B', step: 'first', nudgeId: $json.nudgeId, movieIds: $json.movieIds, totalKes: $json.totalKes, discountPct: $json.discountPct, aiUsed: $json.aiUsed ?? false, fallbackReason: $json.fallbackReason ?? null, channel: 'sms', reason: $json.reason, $lib: 'n8n-commerce' } }] }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "af63a000-fbcf-49c1-bd5c-4730c5949486",
+      "name": "Wait 2 minutes (demo; 2 h live)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3600,
+        -100
+      ],
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "webhookId": "7fccf1a4-b604-4d97-aab0-c5a22f11fc3a"
+    },
+    {
+      "id": "ce8ff01a-211e-49e1-a01f-63f3d5bb25fe",
+      "name": "Paid yet? (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        -100
+      ],
+      "parameters": {
+        "url": "={{ 'https://a234-105-163-1-93.ngrok-free.app/api/internal/orders/' + $('Rescue facts').item.json.orderId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8xVhWQpGmgkd32mG",
+          "name": "Yakwetu Internal Api Key"
+        }
+      }
+    },
+    {
+      "id": "c55f7657-289f-4175-86c4-71103656ad08",
+      "name": "Still unpaid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4080,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8cf5557f-7377-4aca-97de-6c4e7de26177",
+              "leftValue": "={{ !$json.order.paid && !$json.ownsAll }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0f6b7c64-832f-49a4-aabf-76b726fb7a80",
+      "name": "Recovered: done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        60
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "83c3da26-a21d-4f2c-895a-bdbc0e778e7b",
+      "name": "PONA10 link (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4320,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://a234-105-163-1-93.ngrok-free.app/api/internal/nudges",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $('Rescue facts').item.json.userId, scenario: 'B', step: 'incentive', movieIds: $json.order.movieIds, orderId: $json.order.id, discountPct: 10, code: 'PONA10', ttlMinutes: 60 }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8xVhWQpGmgkd32mG",
+          "name": "Yakwetu Internal Api Key"
+        }
+      }
+    },
+    {
+      "id": "36bb66ae-5ada-4d7d-9add-eb0a43864ad9",
+      "name": "Incentive allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4560,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0759b241-e712-4c6a-9a7e-004842a6fb68",
+              "leftValue": "={{ $json.status === 'created' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dd505e53-8225-47e4-b346-28b499cbaefc",
+      "name": "Write the incentive SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        -260
+      ],
+      "parameters": {
+        "jsCode": "const rescue = $(\"Guard the copy\").first().json;\nconst link = $input.first().json;\nconst message = `Still want ${rescue.title}, ${rescue.firstName}? Code PONA10: KES ${link.totalKes} (10% off) for the next hour: ${link.url}`;\nreturn [{ json: { ...link, userId: rescue.userId, orderId: rescue.orderId, phone: rescue.phone, message } }];"
+      }
+    },
+    {
+      "id": "4c1d5701-15c0-421c-86c7-14a969a5ac75",
+      "name": "Send incentive SMS (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5040,
+        -260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.africastalking.com/version1/messaging",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "africasmsApp"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "from",
+              "value": "AFTKNG"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YQE2SdNTmX1gcmbM",
+          "name": "Africastalking API KEY"
+        }
+      }
+    },
+    {
+      "id": "05783cd3-012c-4938-9be0-dbcc6f1dfcc7",
+      "name": "Record: incentive sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5280,
+        -260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.i.posthog.com/batch/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: '__POSTHOG_PROJECT_TOKEN__', batch: [{ event: 'nudge.sent', distinct_id: $json.userId, properties: { scenario: 'B', step: 'incentive', nudgeId: $json.nudgeId, movieIds: $json.movieIds, totalKes: $json.totalKes, discountPct: $json.discountPct, aiUsed: $json.aiUsed ?? false, fallbackReason: $json.fallbackReason ?? null, channel: 'sms', code: 'PONA10', $lib: 'n8n-commerce' } }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Payment failed (RabbitMQ)": {
+      "main": [
+        [
+          {
+            "node": "Paid after all? (Paystack verify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paid after all? (Paystack verify)": {
+      "main": [
+        [
+          {
+            "node": "Settled after all?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settled after all?": {
+      "main": [
+        [
+          {
+            "node": "Paid: no message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Order & viewer (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order & viewer (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Worth a message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worth a message?": {
+      "main": [
+        [
+          {
+            "node": "Send window (07:00–21:00)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send window (07:00–21:00)": {
+      "main": [
+        [
+          {
+            "node": "Outside the window?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outside the window?": {
+      "main": [
+        [
+          {
+            "node": "Hold until the window opens",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resume link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold until the window opens": {
+      "main": [
+        [
+          {
+            "node": "Resume link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume link (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Link created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link created?": {
+      "main": [
+        [
+          {
+            "node": "Rescue facts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capped or not needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rescue facts": {
+      "main": [
+        [
+          {
+            "node": "AI: troubleshooting copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: troubleshooting copy · model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI: troubleshooting copy",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: troubleshooting copy · parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI: troubleshooting copy",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: troubleshooting copy": {
+      "main": [
+        [
+          {
+            "node": "Guard the copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard the copy": {
+      "main": [
+        [
+          {
+            "node": "Send rescue SMS (Africa's Talking)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send rescue SMS (Africa's Talking)": {
+      "main": [
+        [
+          {
+            "node": "Record: rescue sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record: rescue sent": {
+      "main": [
+        [
+          {
+            "node": "Wait 2 minutes (demo; 2 h live)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 minutes (demo; 2 h live)": {
+      "main": [
+        [
+          {
+            "node": "Paid yet? (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paid yet? (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Still unpaid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still unpaid?": {
+      "main": [
+        [
+          {
+            "node": "PONA10 link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recovered: done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PONA10 link (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Incentive allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incentive allowed?": {
+      "main": [
+        [
+          {
+            "node": "Write the incentive SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the incentive SMS": {
+      "main": [
+        [
+          {
+            "node": "Send incentive SMS (Africa's Talking)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send incentive SMS (Africa's Talking)": {
+      "main": [
+        [
+          {
+            "node": "Record: incentive sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

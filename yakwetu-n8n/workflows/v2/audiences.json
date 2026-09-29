@@ -1,0 +1,144 @@
+{
+  "name": "YKW · Audiences — taste → PostHog profiles (nightly)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "1ed8e3df-dab8-4a00-b9f5-3e486c1cfcf9",
+      "name": "Note 3340ae",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -340
+      ],
+      "parameters": {
+        "content": "## Who are our viewers by taste?\nEvery night at 02:00 this copies what the recommender (sinema-recs) has learned about each active viewer onto their **PostHog person profile**: favourite genre, top three genres, trailers watched, films owned and completed.\n\nPostHog can then cut every dashboard by taste, and the cohorts *Drama lovers*, *Thriller fans*… stay current for targeting.\n\n**One execution a night**, however many viewers: one read, one batched write.",
+        "width": 460,
+        "height": 300,
+        "color": 4
+      }
+    },
+    {
+      "id": "161fb9a4-7c5e-4fec-a648-9a3b0a93ef98",
+      "name": "Every night at 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3cfc8362-eddf-40b0-bd26-fdefbdea1123",
+      "name": "Active viewers' taste (sinema-recs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "url": "https://3-226-65-199.sslip.io/v1/viewers",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "activeWithinDays",
+              "value": "30"
+            },
+            {
+              "name": "limit",
+              "value": "1000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Credential: Header Auth 'Sinema recs API': x-api-key = <RECS_API_KEY>",
+      "notesInFlow": true
+    },
+    {
+      "id": "ef089c62-9ff2-4599-91cf-d0a3a50eb0e3",
+      "name": "Build profile updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// One PostHog $set per viewer, plus a summary event for the run.\nconst viewers = $input.first().json.data?.viewers ?? [];\nconst syncedAt = new Date().toISOString();\nconst byGenre = {};\nconst batch = viewers.map((viewer) => {\n  const genre = viewer.favoriteGenre ?? 'unknown';\n  byGenre[genre] = (byGenre[genre] ?? 0) + 1;\n  return {\n    event: '$set',\n    distinct_id: viewer.viewerId,\n    properties: {\n      $set: {\n        favoriteGenre: genre,\n        topGenres: viewer.topGenres,\n        trailersWatched: viewer.trailersWatched,\n        filmsOwned: viewer.filmsOwned,\n        filmsCompleted: viewer.filmsCompleted,\n        tasteSyncedAt: syncedAt,\n      },\n      $lib: 'n8n-audiences',\n    },\n  };\n});\nbatch.push({ event: 'audiences.synced', distinct_id: 'n8n-audiences', properties: { viewers: viewers.length, byGenre, $lib: 'n8n-audiences' } });\nreturn [{ json: { viewers: viewers.length, byGenre, batch } }];"
+      }
+    },
+    {
+      "id": "4d7ef6ad-79a7-4eff-a9e5-e7ed4c10aaa9",
+      "name": "Update PostHog profiles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.i.posthog.com/batch/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: '__POSTHOG_PROJECT_TOKEN__', batch: $json.batch }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every night at 02:00": {
+      "main": [
+        [
+          {
+            "node": "Active viewers' taste (sinema-recs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Active viewers' taste (sinema-recs)": {
+      "main": [
+        [
+          {
+            "node": "Build profile updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build profile updates": {
+      "main": [
+        [
+          {
+            "node": "Update PostHog profiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

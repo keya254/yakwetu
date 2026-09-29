@@ -1,0 +1,311 @@
+{
+  "name": "YKW · Daily digest — business report email (07:00)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "cefe2211-b300-4970-af9f-7a1556b9fdc0",
+      "name": "Note 09a3e6",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -460
+      ],
+      "parameters": {
+        "content": "## Daily digest: a business report in your inbox\nAt 07:00 Nairobi:\n- **PostHog** (behaviour): viewers, sign-ups, film views, trailers, checkouts; genres; top films. Last 24 h against the 24 before.\n- **Storefront** (money, Paystack-verified): revenue, payments by status, failure reasons, nudges sent → opened → paid and **KES recovered** per scenario.\n- **n8n HTML node** renders the report (email-safe tables); Gmail sends it; PostHog records `digest.sent`.\n\nNo made-up numbers: an empty section says \"No data yet\".",
+        "width": 520,
+        "height": 340,
+        "color": 4
+      }
+    },
+    {
+      "id": "0a5259e9-4ebb-437b-88ca-b30d70e80ef6",
+      "name": "Every day at 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c7fd6e37-8f7b-4366-a7ea-fc52cc162f41",
+      "name": "Headline numbers (PostHog)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.posthog.com/api/projects/629752/query/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":{\"kind\":\"HogQLQuery\",\"query\":\"SELECT uniqIf(person_id, event = '$pageview' AND timestamp > now() - INTERVAL 24 HOUR) AS viewers, uniqIf(person_id, event = '$pageview' AND timestamp <= now() - INTERVAL 24 HOUR) AS viewers_prev, countIf(event = 'user.signed_up' AND timestamp > now() - INTERVAL 24 HOUR) AS signups, countIf(event = 'user.signed_up' AND timestamp <= now() - INTERVAL 24 HOUR) AS signups_prev, countIf(event = 'movie.viewed' AND timestamp > now() - INTERVAL 24 HOUR) AS film_views, countIf(event = 'video.started' AND timestamp > now() - INTERVAL 24 HOUR) AS trailer_starts, countIf(event = 'checkout.started' AND timestamp > now() - INTERVAL 24 HOUR) AS checkouts FROM events WHERE timestamp > now() - INTERVAL 48 HOUR\"}}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZRYWNG9VSqlxkAvj",
+          "name": "PostHog personal (read)"
+        }
+      }
+    },
+    {
+      "id": "664f1b5b-ceeb-4432-9e0b-adc28591165a",
+      "name": "Genres (PostHog)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.posthog.com/api/projects/629752/query/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":{\"kind\":\"HogQLQuery\",\"query\":\"SELECT properties.primaryGenre AS genre, countIf(event = 'movie.viewed') AS views, countIf(event = 'video.started') AS trailers, uniq(person_id) AS viewers FROM events WHERE event IN ('movie.viewed', 'video.started') AND timestamp > now() - INTERVAL 24 HOUR AND properties.primaryGenre IS NOT NULL GROUP BY genre ORDER BY views DESC LIMIT 6\"}}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZRYWNG9VSqlxkAvj",
+          "name": "PostHog personal (read)"
+        }
+      }
+    },
+    {
+      "id": "912a5ced-b9bd-456f-b4bf-9324898bc94f",
+      "name": "Films (PostHog)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.posthog.com/api/projects/629752/query/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":{\"kind\":\"HogQLQuery\",\"query\":\"SELECT properties.movieTitle AS film, countIf(event = 'movie.viewed') AS views, countIf(event = 'video.started') AS trailers FROM events WHERE event IN ('movie.viewed', 'video.started') AND timestamp > now() - INTERVAL 24 HOUR AND properties.movieTitle IS NOT NULL GROUP BY film ORDER BY views DESC LIMIT 5\"}}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZRYWNG9VSqlxkAvj",
+          "name": "PostHog personal (read)"
+        }
+      }
+    },
+    {
+      "id": "35953f86-bf45-44fc-966a-a0439ebae207",
+      "name": "Money (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'https://a234-105-163-1-93.ngrok-free.app/api/internal/stats?days=1' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8xVhWQpGmgkd32mG",
+          "name": "Yakwetu Internal Api Key"
+        }
+      }
+    },
+    {
+      "id": "0b1292c5-033b-45e7-95c3-068fc5af7c04",
+      "name": "Report data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const table = (name) => {\n    const response = $(name).first().json;\n    return (response.results ?? []).map((row) => Object.fromEntries((response.columns ?? []).map((column, i) => [column, row[i]])));\n};\nconst head = table(\"Headline numbers (PostHog)\")[0] ?? {};\nconst genres = table(\"Genres (PostHog)\");\nconst films = table(\"Films (PostHog)\");\nconst money = $(\"Money (storefront)\").first().json;\nconst pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);\nconst delta = (now, prev) => {\n    if (!prev)\n        return now ? '<span style=\"color:#16a34a\">new</span>' : '<span style=\"color:#9ca3af\">—</span>';\n    const change = pct(now - prev, prev);\n    return change >= 0 ? `<span style=\"color:#16a34a\">▲ ${change}%</span>` : `<span style=\"color:#dc2626\">▼ ${Math.abs(change)}%</span>`;\n};\nconst kes = (value) => `KES ${Number(value || 0).toLocaleString(\"en-KE\")}`;\nconst esc = (value) => String(value ?? \"\").replace(/[&<>\"]/g, (c) => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\" })[c]);\nconst cap = (value) => (value ? value[0].toUpperCase() + value.slice(1) : \"Unknown\");\nconst row = (cells, bold = false) => `<tr>${cells.map((cell, i) => `<td style=\"padding:8px 12px;border-bottom:1px solid #f1e7d8;${i ? \"text-align:right;\" : \"\"}${bold ? \"font-weight:600;\" : \"\"}\">${cell}</td>`).join(\"\")}</tr>`;\nconst empty = (columns) => `<tr><td colspan=\"${columns}\" style=\"padding:10px 12px;color:#9ca3af\">No data yet</td></tr>`;\nconst recovered = (money.nudgesByScenario ?? []).reduce((sum, s) => sum + s.recoveredKes, 0);\nconst funnel = [\n    [\"Film pages opened\", head.film_views ?? 0],\n    [\"Trailers started\", head.trailer_starts ?? 0],\n    [\"Checkouts started\", head.checkouts ?? 0],\n    [\"Paid\", money.paymentsSucceeded ?? 0],\n];\nconst funnelRows = funnel.map(([label, count], i) => row([String(label), String(count), i ? `${pct(Number(count), Number(funnel[i - 1][1]))}%` : \"\"])).join(\"\");\nconst genreRows = genres.length ? genres.map((g) => row([esc(cap(g.genre)), String(g.views), String(g.trailers), String(g.viewers)])).join(\"\") : empty(4);\nconst filmRows = films.length ? films.map((f) => row([esc(f.film), String(f.views), String(f.trailers)])).join(\"\") : empty(3);\nconst scenarioNames = { A: \"A · Abandoned checkout\", B: \"B · Payment rescue\", C: \"C · Post-purchase\", welcome: \"Welcome\" };\nconst nudgeRows = (money.nudgesByScenario ?? []).length\n    ? money.nudgesByScenario.map((s) => row([esc(scenarioNames[s.scenario] ?? s.scenario), String(s.sent), String(s.opened), String(s.converted), kes(s.recoveredKes)])).join(\"\")\n    : empty(5);\nconst reasons = Object.entries(money.failuresByReason ?? {});\nconst failureLine = reasons.length ? reasons.map(([reason, count]) => `${esc(reason.replace(/_/g, \" \"))} ${count}`).join(\" · \") : \"none\";\nconst status = money.paymentsByStatus ?? {};\n// One thing to act on: the weakest funnel step with traffic, or a genre looked at but rarely played.\nlet action = \"Not enough traffic yet to call anything. Share a few film links and check tomorrow.\";\nconst browsedNotPlayed = genres.filter((g) => g.views >= 3).sort((a, b) => pct(a.trailers, a.views) - pct(b.trailers, b.views))[0];\nconst steps = funnel.slice(1).map(([label, count], i) => ({ label: `${funnel[i][0]} → ${label}`, rate: pct(Number(count), Number(funnel[i][1])), n: Number(funnel[i][1]) })).filter((s) => s.n > 0);\nconst weakest = [...steps].sort((a, b) => a.rate - b.rate)[0];\nif (browsedNotPlayed && pct(browsedNotPlayed.trailers, browsedNotPlayed.views) < 30) {\n    action = `${cap(browsedNotPlayed.genre)} is looked at but rarely played (${pct(browsedNotPlayed.trailers, browsedNotPlayed.views)}% of views start a trailer). Try stronger posters or trailers for those titles.`;\n}\nelse if (weakest) {\n    action = `The weakest step was ${weakest.label} at ${weakest.rate}%. Start there.`;\n}\nreturn [\n    {\n        json: {\n            date: new Date().toLocaleDateString(\"en-KE\", { weekday: \"short\", day: \"numeric\", month: \"short\", timeZone: \"Africa/Nairobi\" }),\n            viewers: head.viewers ?? 0,\n            viewersDelta: delta(head.viewers ?? 0, head.viewers_prev ?? 0),\n            signups: head.signups ?? 0,\n            signupsDelta: delta(head.signups ?? 0, head.signups_prev ?? 0),\n            revenue: kes(money.revenueKes),\n            revenueDelta: delta(money.revenueKes ?? 0, money.revenueKesPrevious ?? 0),\n            recovered: kes(recovered),\n            funnelRows,\n            paid: status.succeeded ?? 0,\n            failed: status.failed ?? 0,\n            abandoned: status.abandoned ?? 0,\n            failureLine,\n            genreRows,\n            filmRows,\n            nudgeRows,\n            action: esc(action),\n            subject: `Yakwetu · ${kes(money.revenueKes)} revenue, ${head.viewers ?? 0} viewers, ${kes(recovered)} recovered`,\n            // Recorded to PostHog (digest.sent) with the headline numbers.\n            headline: { viewers: head.viewers ?? 0, signups: head.signups ?? 0, revenueKes: money.revenueKes ?? 0, recoveredKes: recovered, action },\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "11bfa9f2-f28a-4b78-98ec-b05924caa41a",
+      "name": "Render the report (HTML)",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "operation": "generateHtmlTemplate",
+        "html": "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\" /><meta name=\"viewport\" content=\"width=device-width\" /><title>Yakwetu daily report</title></head>\n<body style=\"margin:0;padding:0;background:#f6efe4;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f1a14\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f6efe4;padding:24px 0\">\n<tr><td align=\"center\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden\">\n  <tr><td style=\"background:#1f1a14;padding:20px 24px;color:#fff\">\n    <div style=\"font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#f5a524\">Yakwetu Sinema</div>\n    <div style=\"font-size:22px;font-weight:700;margin-top:4px\">Daily report · {{ $json.date }}</div>\n    <div style=\"font-size:13px;color:#cfc4b3;margin-top:2px\">Last 24 hours, against the 24 before</div>\n  </td></tr>\n  <tr><td style=\"padding:16px 16px 4px\">\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"8\">\n      <tr>\n        <td style=\"background:#fbf6ee;border-radius:10px;padding:12px\"><div style=\"font-size:12px;color:#8a7d6a\">Viewers</div><div style=\"font-size:22px;font-weight:700\">{{ $json.viewers }}</div><div style=\"font-size:12px\">{{ $json.viewersDelta }}</div></td>\n        <td style=\"background:#fbf6ee;border-radius:10px;padding:12px\"><div style=\"font-size:12px;color:#8a7d6a\">Sign-ups</div><div style=\"font-size:22px;font-weight:700\">{{ $json.signups }}</div><div style=\"font-size:12px\">{{ $json.signupsDelta }}</div></td>\n        <td style=\"background:#fbf6ee;border-radius:10px;padding:12px\"><div style=\"font-size:12px;color:#8a7d6a\">Revenue</div><div style=\"font-size:22px;font-weight:700\">{{ $json.revenue }}</div><div style=\"font-size:12px\">{{ $json.revenueDelta }}</div></td>\n        <td style=\"background:#fff4e0;border-radius:10px;padding:12px\"><div style=\"font-size:12px;color:#8a7d6a\">Recovered by nudges</div><div style=\"font-size:22px;font-weight:700;color:#c2410c\">{{ $json.recovered }}</div><div style=\"font-size:12px;color:#8a7d6a\">SMS → paid</div></td>\n      </tr>\n    </table>\n  </td></tr>\n  <tr><td style=\"padding:8px 24px\">\n    <div style=\"font-size:15px;font-weight:700;margin:10px 0 6px\">Funnel</div>\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size:14px;border-collapse:collapse\">\n      <tr style=\"color:#8a7d6a;font-size:12px\"><td style=\"padding:6px 12px\">Step</td><td style=\"padding:6px 12px;text-align:right\">Count</td><td style=\"padding:6px 12px;text-align:right\">Conversion</td></tr>\n      {{ $json.funnelRows }}\n    </table>\n  </td></tr>\n  <tr><td style=\"padding:8px 24px\">\n    <div style=\"font-size:15px;font-weight:700;margin:10px 0 6px\">Payments</div>\n    <div style=\"font-size:14px\">Paid <b>{{ $json.paid }}</b> · failed <b>{{ $json.failed }}</b> · abandoned <b>{{ $json.abandoned }}</b></div>\n    <div style=\"font-size:13px;color:#8a7d6a;margin-top:4px\">Why they failed: {{ $json.failureLine }}</div>\n  </td></tr>\n  <tr><td style=\"padding:8px 24px\">\n    <div style=\"font-size:15px;font-weight:700;margin:10px 0 6px\">Nudges (n8n)</div>\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size:14px;border-collapse:collapse\">\n      <tr style=\"color:#8a7d6a;font-size:12px\"><td style=\"padding:6px 12px\">Scenario</td><td style=\"padding:6px 12px;text-align:right\">Sent</td><td style=\"padding:6px 12px;text-align:right\">Opened</td><td style=\"padding:6px 12px;text-align:right\">Paid</td><td style=\"padding:6px 12px;text-align:right\">Recovered</td></tr>\n      {{ $json.nudgeRows }}\n    </table>\n  </td></tr>\n  <tr><td style=\"padding:8px 24px\">\n    <div style=\"font-size:15px;font-weight:700;margin:10px 0 6px\">Genres</div>\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size:14px;border-collapse:collapse\">\n      <tr style=\"color:#8a7d6a;font-size:12px\"><td style=\"padding:6px 12px\">Genre</td><td style=\"padding:6px 12px;text-align:right\">Views</td><td style=\"padding:6px 12px;text-align:right\">Trailers</td><td style=\"padding:6px 12px;text-align:right\">Viewers</td></tr>\n      {{ $json.genreRows }}\n    </table>\n  </td></tr>\n  <tr><td style=\"padding:8px 24px\">\n    <div style=\"font-size:15px;font-weight:700;margin:10px 0 6px\">Top films</div>\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size:14px;border-collapse:collapse\">\n      <tr style=\"color:#8a7d6a;font-size:12px\"><td style=\"padding:6px 12px\">Film</td><td style=\"padding:6px 12px;text-align:right\">Views</td><td style=\"padding:6px 12px;text-align:right\">Trailers</td></tr>\n      {{ $json.filmRows }}\n    </table>\n  </td></tr>\n  <tr><td style=\"padding:16px 24px\">\n    <div style=\"background:#fff4e0;border-radius:10px;padding:14px 16px;font-size:14px\"><b>One thing to act on:</b> {{ $json.action }}</div>\n  </td></tr>\n  <tr><td style=\"padding:4px 24px 22px;font-size:12px;color:#8a7d6a\">Behaviour from PostHog · money from the storefront (Paystack-verified) · sent by n8n</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>"
+      }
+    },
+    {
+      "id": "3bd24ffb-4039-4350-99f5-e56c61ebe87f",
+      "name": "Email the report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1680,
+        -80
+      ],
+      "parameters": {
+        "sendTo": "brian@learnitpal.com",
+        "subject": "={{ $('Report data').item.json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nf01MA1vhcwQsDZV",
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "73df3c8c-3c0b-4bf4-b684-dcd81db7d600"
+    },
+    {
+      "id": "c109c4fa-2a02-4fe3-a6c1-ce3770c2954f",
+      "name": "Record the digest in PostHog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.i.posthog.com/batch/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: '__POSTHOG_PROJECT_TOKEN__', batch: [{ event: 'digest.sent', distinct_id: 'n8n-digest', properties: { ...$('Report data').item.json.headline, $lib: 'n8n-digest' } }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every day at 07:00": {
+      "main": [
+        [
+          {
+            "node": "Headline numbers (PostHog)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Headline numbers (PostHog)": {
+      "main": [
+        [
+          {
+            "node": "Genres (PostHog)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Genres (PostHog)": {
+      "main": [
+        [
+          {
+            "node": "Films (PostHog)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Films (PostHog)": {
+      "main": [
+        [
+          {
+            "node": "Money (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Money (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Report data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report data": {
+      "main": [
+        [
+          {
+            "node": "Render the report (HTML)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render the report (HTML)": {
+      "main": [
+        [
+          {
+            "node": "Email the report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Record the digest in PostHog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

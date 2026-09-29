@@ -1,0 +1,701 @@
+{
+  "name": "YKW 02 — Browse & Cart Abandonment Recovery · v2 (RabbitMQ)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "3e9fa13c-4379-4ea5-88eb-220e25a49928",
+      "name": "Note 60fa98",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -500
+      ],
+      "parameters": {
+        "content": "## YKW 02 v2: Abandoned checkout\nThe storefront team's scenario, without the 15-minute Postgres scan:\n\n- **RabbitMQ** `q.n8n.checkout-abandoned`: the storefront publishes `payment.abandoned` when Paystack still shows nothing paid after the window (RabbitMQ timers re-check every 2 min). Each checkout has its own timer; nothing scans.\n- **Send window 15:00–21:00** Nairobi, when people unwind and watch; outside it, held until 15:00.\n- Skip if paid since, owned, or no phone.\n- **The recommender** picks the closest film to the cart; bundle at 20% off (10% off the cart film alone without a pick). The **storefront prices it** and signs the link (1 h).\n- **AI copy** from facts only, checked by code; template if it fails.\n\nPaying through the link credits *KES recovered · A*.",
+        "width": 560,
+        "height": 400,
+        "color": 4
+      }
+    },
+    {
+      "id": "0022dee5-ed23-479f-80dd-6a2bf56999b8",
+      "name": "Checkout abandoned (RabbitMQ)",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "queue": "q.n8n.checkout-abandoned",
+        "options": {
+          "acknowledge": "executionFinishesSuccessfully",
+          "jsonParseBody": true,
+          "onlyContent": true,
+          "parallelMessages": 5
+        }
+      },
+      "credentials": {
+        "rabbitmq": {
+          "id": "0XUkvX0FdyyHYkKN",
+          "name": "RabbitMQ account"
+        }
+      }
+    },
+    {
+      "id": "fd5c44b4-e19b-4f2b-a89e-ecbb95680118",
+      "name": "Send window (15:00–21:00)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const OPEN = 15;\nconst CLOSE = 21;\nconst now = new Date();\nconst parts = Object.fromEntries(new Intl.DateTimeFormat(\"en-GB\", { timeZone: \"Africa/Nairobi\", hour: \"numeric\", minute: \"numeric\", hourCycle: \"h23\" })\n    .formatToParts(now)\n    .map((part) => [part.type, part.value]));\nconst hour = Number(parts.hour) + Number(parts.minute) / 60;\nlet waitMinutes = 0;\nif (hour < OPEN)\n    waitMinutes = Math.ceil((OPEN - hour) * 60);\nelse if (hour >= CLOSE)\n    waitMinutes = Math.ceil((24 - hour + OPEN) * 60);\nreturn [\n    {\n        json: {\n            ...$input.first().json,\n            sendWindow: `${OPEN}:00–${CLOSE}:00 Nairobi`,\n            holdUntilWindow: waitMinutes > 0,\n            waitMinutes,\n            sendAt: new Date(now.getTime() + waitMinutes * 60_000).toISOString(),\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "11eea7e0-9138-4b49-8ab3-7bb5a3a7e7fa",
+      "name": "Outside the window?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "167bcddb-63b8-4b89-8424-961b56e9a5c8",
+              "leftValue": "={{ $json.holdUntilWindow }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "33667305-e192-4a8e-abe5-476743f936e9",
+      "name": "Hold until 15:00",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        -140
+      ],
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $json.sendAt }}"
+      },
+      "webhookId": "f6dfcfbc-67e8-4722-85ba-327ad224021a"
+    },
+    {
+      "id": "51e408be-ad83-4f7a-b687-c4008d038362",
+      "name": "Order & viewer (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'https://a234-105-163-1-93.ngrok-free.app/api/internal/orders/' + $('Checkout abandoned (RabbitMQ)').item.json.properties.orderId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8xVhWQpGmgkd32mG",
+          "name": "Yakwetu Internal Api Key"
+        }
+      }
+    },
+    {
+      "id": "01b411a7-c1cc-45da-804b-f40467f2aab4",
+      "name": "Worth a message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cf5db568-b7cd-44d7-8eb4-5c35d77bfd36",
+              "leftValue": "={{ !$json.order.paid && !$json.ownsAll && Boolean($json.user?.phone) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "130737e4-4890-4436-a66b-4dfe3e7c06e6",
+      "name": "Nothing to send",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b4eb1f67-a57a-4398-a0ae-5caff30ec342",
+      "name": "Closest film to the cart (sinema-recs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        -80
+      ],
+      "parameters": {
+        "url": "={{ 'https://3-226-65-199.sslip.io/v1/recs/' + encodeURIComponent($('Order & viewer (storefront)').item.json.user.id) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "mode",
+              "value": "browse"
+            },
+            {
+              "name": "anchor",
+              "value": "={{ $json.order.movieIds[0] }}"
+            },
+            {
+              "name": "exclude",
+              "value": "={{ $json.order.movieIds.join(',') }}"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            },
+            {
+              "name": "log",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FCJ9jxToPVMeaOvM",
+          "name": "Sinema recs API"
+        }
+      },
+      "notes": "If the recommender is down this answers empty and the offer falls back to the cart film alone.",
+      "notesInFlow": true
+    },
+    {
+      "id": "57e78504-4aa2-4fae-abef-664ee5101792",
+      "name": "Build the bundle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const info = $(\"Order & viewer (storefront)\").first().json;\nconst picks = $input.first().json?.data?.items ?? [];\nconst pick = picks.find((item) => !info.order.movieIds.includes(item.movieId) && !info.ownedMovieIds.includes(item.movieId));\nconst movieIds = pick ? [info.order.movieIds[0], pick.movieId] : info.order.movieIds;\nreturn [\n    {\n        json: {\n            userId: info.user.id,\n            orderId: info.order.id,\n            movieIds,\n            discountPct: pick ? 20 : 10,\n            pick: pick ? { title: pick.title, reason: pick.reason, genres: pick.genres, why: pick.why ?? null } : null,\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "0f81acb2-a279-40c8-b1ec-6545580b3d0a",
+      "name": "Offer link (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://a234-105-163-1-93.ngrok-free.app/api/internal/nudges",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $json.userId, scenario: 'A', step: 'first', movieIds: $json.movieIds, discountPct: $json.discountPct, ttlMinutes: 60 }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8xVhWQpGmgkd32mG",
+          "name": "Yakwetu Internal Api Key"
+        }
+      }
+    },
+    {
+      "id": "0cbe4cd1-fdf5-4880-b388-0015c1114822",
+      "name": "Link created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30a9c65e-f5b5-4d3f-8c72-83f811330ace",
+              "leftValue": "={{ $json.status === 'created' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bc1f0a03-3a28-4a46-9473-998992549128",
+      "name": "Capped or not needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        80
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "33ddaae1-5b6d-4b99-a46c-d7cd448ddce3",
+      "name": "Offer facts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "const info = $(\"Order & viewer (storefront)\").first().json;\nconst bundle = $(\"Build the bundle\").first().json;\nconst link = $input.first().json;\nconst [cart, extra] = link.films;\nconst first = info.user.firstName;\nreturn [\n    {\n        json: {\n            userId: info.user.id,\n            orderId: info.order.id,\n            phone: info.user.phone,\n            firstName: first,\n            cartTitle: cart.title,\n            pickTitle: extra?.title ?? null,\n            pickReason: bundle.pick?.why?.matchedGenres?.length ? `also ${bundle.pick.why.matchedGenres.join(\", \")}` : (bundle.pick?.reason ?? null),\n            totalKes: link.totalKes,\n            discountPct: link.discountPct,\n            url: link.url,\n            nudgeId: link.nudgeId,\n            movieIds: link.films.map((film) => film.id),\n            alternative: \"\",\n            fallback: extra\n                ? `${first}, ${cart.title} is still waiting. Get it with ${extra.title} for KES ${link.totalKes} (${link.discountPct}% off), next hour only:`\n                : `${first}, ${cart.title} is still waiting: KES ${link.totalKes} (${link.discountPct}% off) for the next hour:`,\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "26a2360a-1fb3-4701-aeba-2f69fa6b5fb0",
+      "name": "AI: personalise the nudge",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        2640,
+        -160
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=First name: {{ $json.firstName }}\nFilm in their cart: {{ $json.cartTitle }}\nPaired film (may be empty): {{ $json.pickTitle }}\nWhy it's paired: {{ $json.pickReason }}\nBundle price: KES {{ $json.totalKes }} ({{ $json.discountPct }}% off)\nOffer ends: in 1 hour",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You write one SMS to bring back a viewer who opened checkout on Yakwetu Sinema, a Kenyan pay-per-film store, but didn't pay. Make the offer tempting and specific. Rules: at most 110 characters. Warm, plain Kenyan English (a little Swahili like 'Pole' or 'Karibu' is fine). Use only the facts given: never invent a film, price, discount or deadline. Mention the price only if given, exactly as given. No links, no emojis, no hashtags; the link is added after your message. End so the link reads naturally after it (e.g. end with 'Tap:' or 'here:')."
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Credential: attach your OpenAI credential on the model below (gpt-4o-mini).",
+      "notesInFlow": true
+    },
+    {
+      "id": "bacf7290-c082-41bc-bc52-2f9b0541c909",
+      "name": "AI: personalise the nudge · model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2600,
+        40
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 120,
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "7cc1f705-76e6-4137-b8b5-e29e84175599",
+      "name": "AI: personalise the nudge · parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2780,
+        40
+      ],
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\n  \"message\": \"Pole Wanjiku, the M-Pesa prompt for Supa Modo timed out. Tap when your phone's ready:\"\n}"
+      }
+    },
+    {
+      "id": "3fe59104-f9c2-46c5-8dfd-4dbb36045503",
+      "name": "Guard the copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "const facts = $(\"Offer facts\").first().json;\nconst ai = $input.first().json ?? {};\nconst text = String(ai.output?.message ?? ai.text ?? \"\").trim();\nlet fallbackReason = null;\nif (!text)\n    fallbackReason = ai.error ? \"AI error\" : \"no AI answer\";\nelse if (text.length > 120)\n    fallbackReason = \"too long\";\nelse if (/https?:|www\\.|\\.com|\\.app/i.test(text))\n    fallbackReason = \"contains a link\";\nelse {\n    const prices = [...text.matchAll(/KES\\s?([\\d,]+)/gi)].map((match) => Number(match[1].replace(/,/g, \"\")));\n    if (prices.some((price) => price !== facts.totalKes))\n        fallbackReason = \"wrong price\";\n}\nconst body = fallbackReason ? facts.fallback : text;\nreturn [{ json: { ...facts, message: `${body} ${facts.url}${facts.alternative ?? \"\"}`.trim(), aiUsed: !fallbackReason, fallbackReason } }];"
+      }
+    },
+    {
+      "id": "e1a4567f-0e2c-4742-ac86-b754893a32fe",
+      "name": "Send SMS (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.africastalking.com/version1/messaging",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "africasmsApp"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "from",
+              "value": "AFTKNG"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YQE2SdNTmX1gcmbM",
+          "name": "Africastalking API KEY"
+        }
+      }
+    },
+    {
+      "id": "dd4f1f65-4ead-4af1-8cd6-8705ecced7ab",
+      "name": "Record: offer sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://us.i.posthog.com/batch/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: '__POSTHOG_PROJECT_TOKEN__', batch: [{ event: 'nudge.sent', distinct_id: $json.userId, properties: { scenario: 'A', step: 'first', nudgeId: $json.nudgeId, movieIds: $json.movieIds, totalKes: $json.totalKes, discountPct: $json.discountPct, aiUsed: $json.aiUsed ?? false, fallbackReason: $json.fallbackReason ?? null, channel: 'sms', $lib: 'n8n-commerce' } }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Checkout abandoned (RabbitMQ)": {
+      "main": [
+        [
+          {
+            "node": "Send window (15:00–21:00)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send window (15:00–21:00)": {
+      "main": [
+        [
+          {
+            "node": "Outside the window?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outside the window?": {
+      "main": [
+        [
+          {
+            "node": "Hold until 15:00",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Order & viewer (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold until 15:00": {
+      "main": [
+        [
+          {
+            "node": "Order & viewer (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order & viewer (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Worth a message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worth a message?": {
+      "main": [
+        [
+          {
+            "node": "Closest film to the cart (sinema-recs)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Closest film to the cart (sinema-recs)": {
+      "main": [
+        [
+          {
+            "node": "Build the bundle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the bundle": {
+      "main": [
+        [
+          {
+            "node": "Offer link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer link (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Link created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link created?": {
+      "main": [
+        [
+          {
+            "node": "Offer facts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capped or not needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer facts": {
+      "main": [
+        [
+          {
+            "node": "AI: personalise the nudge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: personalise the nudge · model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI: personalise the nudge",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: personalise the nudge · parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI: personalise the nudge",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: personalise the nudge": {
+      "main": [
+        [
+          {
+            "node": "Guard the copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard the copy": {
+      "main": [
+        [
+          {
+            "node": "Send SMS (Africa's Talking)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Africa's Talking)": {
+      "main": [
+        [
+          {
+            "node": "Record: offer sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
