@@ -1,14 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Loader2, Play } from "lucide-react";
 import { toast } from "sonner";
 import { AuthDialog } from "@/components/auth/auth-dialog";
 import { ConfettiBurst } from "@/components/checkout/confetti-burst";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/events/client";
 import { formatKes } from "@/lib/format";
+import { normalisePhone, validPhone } from "@/lib/phone";
+import { cn } from "@/lib/utils";
 
 interface BuyButtonProps {
   movieId: string;
@@ -20,6 +25,10 @@ interface BuyButtonProps {
   nudgeToken?: string;
   /** Replaces "Buy for KES …" (e.g. "Pay KES 179 · 10% off"). */
   label?: string;
+  /** Signed in without a phone: offer an optional field, so a failed payment can be rescued by SMS. */
+  askPhone?: boolean;
+  /** Full-width card button, or the compact one in the mobile bar. */
+  variant?: "card" | "compact" | "inline";
 }
 
 type Phase = "idle" | "starting" | "paying" | "confirming";
@@ -46,12 +55,14 @@ const POLL_FOR_MS = 40_000;
  * - M-Pesa still settling after 40 s: says so. The delayed check on RabbitMQ
  *   unlocks the film when Paystack confirms, even if this tab is closed.
  */
-export function BuyButton({ movieId, title, priceKes, signedIn, owned: ownedAtLoad, nudgeToken, label }: BuyButtonProps) {
+export function BuyButton({ movieId, title, priceKes, signedIn, owned: ownedAtLoad, nudgeToken, label, askPhone = false, variant = "inline" }: BuyButtonProps) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const [owned, setOwned] = useState(ownedAtLoad);
   const [celebrating, setCelebrating] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   async function confirm(reference: string) {
     setPhase("confirming");
@@ -83,6 +94,16 @@ export function BuyButton({ movieId, title, priceKes, signedIn, owned: ownedAtLo
     if (!signedIn && !justSignedIn) {
       setAuthOpen(true);
       return;
+    }
+    if (askPhone && phone.trim()) {
+      const normalised = normalisePhone(phone);
+      if (!validPhone(normalised)) {
+        setPhoneError("Use a number like 0712 345 678, or leave it empty.");
+        return;
+      }
+      setPhoneError(null);
+      // Saved before paying, so a failed payment can still reach them. Not blocking if it fails.
+      await authClient.updateUser({ phone: normalised }).catch(() => undefined);
     }
     setPhase("starting");
     const response = await fetch("/api/checkout", {
@@ -123,13 +144,17 @@ export function BuyButton({ movieId, title, priceKes, signedIn, owned: ownedAtLo
     }
   }
 
+  const sizing = variant === "card" ? "h-12 w-full text-base" : variant === "compact" ? "h-10 px-5" : "min-w-44";
+
   if (owned) {
     return (
       <>
         {celebrating && <ConfettiBurst onDone={() => setCelebrating(false)} />}
-        <div className="inline-flex items-center gap-2 rounded-lg bg-primary/12 px-4 py-2.5 text-sm font-medium text-primary ring-1 ring-primary/25">
-          <Check className="size-4" /> You own this film
-        </div>
+        <Button asChild size="lg" className={cn(sizing, "active:scale-[0.97]")}>
+          <Link href={`/watch/${movieId}`}>
+            <Play className="size-4 fill-current" /> Watch now
+          </Link>
+        </Button>
       </>
     );
   }
@@ -137,7 +162,25 @@ export function BuyButton({ movieId, title, priceKes, signedIn, owned: ownedAtLo
   const busy = phase !== "idle";
   return (
     <>
-      <Button size="lg" onClick={() => void buy()} disabled={busy} className="min-w-44 active:scale-[0.97]">
+      {askPhone && signedIn && variant === "card" && (
+        <div className="mb-3 space-y-1.5 text-left">
+          <label htmlFor={`phone-${movieId}`} className="text-xs text-muted-foreground">
+            Phone for M-Pesa and payment help <span className="text-muted-foreground/70">(optional)</span>
+          </label>
+          <Input
+            id={`phone-${movieId}`}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="0712 345 678"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            aria-invalid={Boolean(phoneError)}
+          />
+          {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+        </div>
+      )}
+      <Button size="lg" onClick={() => void buy()} disabled={busy} className={cn(sizing, "active:scale-[0.97]")}>
         {busy && <Loader2 className="size-4 animate-spin" />}
         {phase === "starting" ? "Opening checkout…" : phase === "paying" ? "Complete payment…" : phase === "confirming" ? "Confirming…" : (label ?? `Buy for ${formatKes(priceKes)}`)}
       </Button>

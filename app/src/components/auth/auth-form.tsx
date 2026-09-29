@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signIn, signUp } from "@/lib/auth-client";
+import { normalisePhone } from "@/lib/phone";
 
 export type Mode = "sign-in" | "sign-up";
 
@@ -30,14 +31,6 @@ export const COPY = {
     switchHref: "/sign-in",
   },
 } as const;
-
-/** Kenyan numbers typed as 07…, 01…, 254… or +254… become +2547…/+2541…; anything else is kept as typed. */
-function normalisePhone(raw: string): string {
-  const digits = raw.replace(/[\s-]/g, "");
-  if (/^0[17]\d{8}$/.test(digits)) return `+254${digits.slice(1)}`;
-  if (/^254[17]\d{8}$/.test(digits)) return `+${digits}`;
-  return digits;
-}
 
 /** Only same-site paths are followed after sign-in. */
 function safeNext(value: string | null): string {
