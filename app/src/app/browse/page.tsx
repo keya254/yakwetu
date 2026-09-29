@@ -5,16 +5,14 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { requireSession } from "@/lib/auth";
 import { getByGenre, getMadeInKenya, getNewReleases, getTrending } from "@/lib/catalog/queries";
-import { getBecauseYouWatched, getForYou, getMyFilms } from "@/lib/catalog/recommended";
+import { getForYou } from "@/lib/catalog/recommended";
 import { firstName } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Browse" };
 
 export default async function BrowsePage() {
   const session = await requireSession("/browse");
-  const [myFilms, becauseYouWatched, forYou, trending, kenya, fresh, drama, thriller, comedy] = await Promise.all([
-    getMyFilms(session.user.id),
-    getBecauseYouWatched(session.user.id),
+  const [forYou, trending, kenya, fresh, drama, thriller, comedy] = await Promise.all([
     getForYou(session.user.id),
     getTrending(10),
     getMadeInKenya(),
@@ -33,8 +31,6 @@ export default async function BrowsePage() {
           <p className="mt-2 text-muted-foreground">Pick a film. Pay once, it’s yours to watch.</p>
         </div>
         <div className="mt-8 space-y-12">
-          {myFilms.length > 0 && <MovieRow title="My films" description="Yours to watch, any time." movies={myFilms} />}
-          {becauseYouWatched && <MovieRow title={`Because you watched ${becauseYouWatched.anchorTitle}`} movies={becauseYouWatched.movies} />}
           {/* Only when the recommender answered; otherwise the regular rows stand alone. */}
           {forYou && <MovieRow title="For you" description="Picked from what you watch and like." movies={forYou} />}
           <TrendingRow movies={trending} />

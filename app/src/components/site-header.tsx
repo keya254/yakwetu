@@ -18,6 +18,9 @@ export async function SiteHeader() {
               <Link href="/browse" className="text-muted-foreground transition-colors duration-150 hover:text-foreground">
                 Browse
               </Link>
+              <Link href="/my-films" className="text-muted-foreground transition-colors duration-150 hover:text-foreground">
+                My films
+              </Link>
             </nav>
           )}
         </div>
