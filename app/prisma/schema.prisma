@@ -217,10 +217,12 @@ model PaymentWebhook {
 /// A film the viewer may watch. One row per viewer and film, so paying twice
 /// never unlocks twice.
 model Entitlement {
-  userId    String
-  movieId   String
-  reference String
-  createdAt DateTime @default(now())
+  userId      String
+  movieId     String
+  reference   String
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  lastWatchedAt DateTime?
 
   @@id([userId, movieId])
   @@index([reference])
