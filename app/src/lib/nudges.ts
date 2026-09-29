@@ -18,8 +18,8 @@ import { publicSiteUrl } from "@/lib/site-url";
  * - discount capped at MAX_DISCOUNT_PCT.
  */
 
-/** Anti-spam caps. Raise NUDGE_MAX_PER_USER_DAY for demos and testing; keep the default in production. */
-const MAX_PER_USER_DAY = Number(process.env.NUDGE_MAX_PER_USER_DAY ?? 3);
+/** Anti-spam caps: nudges per viewer per 24 h (NUDGE_MAX_PER_USER_DAY, default 20). */
+const MAX_PER_USER_DAY = Number(process.env.NUDGE_MAX_PER_USER_DAY ?? 20);
 const MAX_PER_ORDER = 2;
 const MAX_DISCOUNT_PCT = 30;
 const DEFAULT_TTL_MINUTES = 60;
