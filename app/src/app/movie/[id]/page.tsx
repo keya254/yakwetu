@@ -3,6 +3,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Star } from "lucide-react";
 import { MovieViewTracker } from "@/components/analytics/movie-view-tracker";
+import { BuyButton } from "@/components/checkout/buy-button";
 import { MovieRow } from "@/components/movie/movie-row";
 import { Poster } from "@/components/movie/poster";
 import { SiteFooter } from "@/components/site-footer";
@@ -12,7 +13,8 @@ import { VideoBox } from "@/components/video/video-box";
 import { getSession } from "@/lib/auth";
 import { getMovie, getSimilar } from "@/lib/catalog/queries";
 import { getMoreLikeThis } from "@/lib/catalog/recommended";
-import { formatKes, formatRuntime, genreLabel } from "@/lib/format";
+import { isOwned } from "@/lib/payments/service";
+import { formatRuntime, genreLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata({ params }: PageProps<"/movie/[id]">): Promise<Metadata> {
@@ -26,7 +28,10 @@ export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
   // asks a signed-out viewer to sign up (the VideoBox's dialog).
   const [session, movie] = await Promise.all([getSession(), getMovie(id)]);
   if (!movie) notFound();
-  const similar = session ? (await getMoreLikeThis(session.user.id, movie)).movies : await getSimilar(movie.id, movie.genres);
+  const [similar, owned] = await Promise.all([
+    session ? getMoreLikeThis(session.user.id, movie).then((row) => row.movies) : getSimilar(movie.id, movie.genres),
+    session ? isOwned(session.user.id, movie.id) : false,
+  ]);
 
   const facts = [movie.year, formatRuntime(movie.runtimeMin), movie.rated].filter(Boolean);
   const genres = movie.genres.filter((genre) => genre !== "short");
@@ -72,8 +77,10 @@ export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
                 <VideoBox movieId={movie.id} videoId={movie.youtubeId} title={movie.title} signedIn={Boolean(session)} className="mt-6" />
               )}
 
-              <p className="mt-6 text-2xl font-bold text-primary tabular-nums">{formatKes(movie.priceKes)}</p>
-              <p className="text-sm text-muted-foreground">One payment. Yours to watch, no subscription.</p>
+              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
+                <BuyButton movieId={movie.id} title={movie.title} priceKes={movie.priceKes} signedIn={Boolean(session)} owned={owned} />
+                <p className="text-sm text-muted-foreground">Pay once with M-Pesa or card. No subscription.</p>
+              </div>
 
               {movie.plot && <p className="mt-8 max-w-[65ch] leading-relaxed text-foreground/90">{movie.plot}</p>}
 
