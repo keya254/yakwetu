@@ -15,6 +15,8 @@ interface VideoBoxProps {
   title: string;
   signedIn: boolean;
   className?: string;
+  /** trailer (film page, anyone) or film (an owner on /watch: watch.* events, "Now playing"). */
+  mode?: "trailer" | "film";
 }
 
 type Phase = "idle" | "loading" | "playing" | "buffering" | "paused" | "ended" | "error";
@@ -44,7 +46,7 @@ const AUTOPLAY_GRACE_MS = 1500;
  * - Watched time counts only played seconds, so scrubbing to the end isn't a
  *   "completed" watch.
  */
-export function VideoBox({ movieId, videoId, title, signedIn, className }: VideoBoxProps) {
+export function VideoBox({ movieId, videoId, title, signedIn, className, mode = "trailer" }: VideoBoxProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement>(null);
@@ -83,6 +85,7 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
       const player = playerRef.current;
       trackVideo({
         name,
+        mode,
         movieId,
         videoId,
         durationSec: round(player?.getDuration?.() ?? 0),
@@ -93,7 +96,7 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
         positionSec: round(extra.positionSec ?? player?.getCurrentTime?.() ?? 0),
       });
     },
-    [movieId, videoId],
+    [movieId, videoId, mode],
   );
 
   // ── Controls visibility ────────────────────────────────────────────────
@@ -452,7 +455,7 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
             </span>
             <span className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-left sm:p-5">
               <span className="min-w-0">
-                <span className="block text-xs font-medium tracking-wide text-white/70 uppercase">Trailer</span>
+                <span className="block text-xs font-medium tracking-wide text-white/70 uppercase">{mode === "film" ? "Now playing" : "Trailer"}</span>
                 <span className="block truncate text-base font-semibold sm:text-lg">{title}</span>
               </span>
               {!authed && <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">Free account to watch</span>}
@@ -484,7 +487,7 @@ export function VideoBox({ movieId, videoId, title, signedIn, className }: Video
 
         {phase === "ended" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center text-white">
-            <p className="text-sm text-white/70">That was the trailer for</p>
+            <p className="text-sm text-white/70">{mode === "film" ? "You've finished" : "That was the trailer for"}</p>
             <p className="text-xl font-bold sm:text-2xl">{title}</p>
             <button
               type="button"

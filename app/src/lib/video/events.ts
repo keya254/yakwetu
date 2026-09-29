@@ -19,6 +19,8 @@ export type VideoEventName =
 
 export interface VideoEvent {
   name: VideoEventName;
+  /** trailer: anyone, on the film page. film: an owner on /watch (feeds taste and Scenario C). */
+  mode?: "trailer" | "film";
   movieId: string;
   videoId: string;
   /** Where the playhead is, in seconds. */
@@ -33,7 +35,24 @@ export interface VideoEvent {
   errorCode?: number;
 }
 
-export function trackVideo({ name, ...properties }: VideoEvent): void {
-  if (process.env.NODE_ENV === "development") console.debug("[video]", name, properties);
-  track(name, properties);
+export function trackVideo({ name, mode = "trailer", ...properties }: VideoEvent): void {
+  if (process.env.NODE_ENV === "development") console.debug("[video]", mode, name, properties);
+  if (mode === "trailer") return track(name, properties);
+
+  // Watching the film itself: started and milestones become watch.* (the recommender's
+  // watch signals); finishing goes to the server, which checks it and emits watch.completed.
+  if (name === "video.started") return track("watch.started", properties);
+  if (name === "video.progress") {
+    return track("watch.progress", { ...properties, progress: (properties.percent ?? 0) / 100, watchedMs: Math.round(properties.watchedSec * 1000) });
+  }
+  if (name === "video.completed") {
+    void fetch("/api/watch/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ movieId: properties.movieId, watchedSec: properties.watchedSec, durationSec: properties.durationSec }),
+      keepalive: true,
+    }).catch(() => undefined);
+    return;
+  }
+  track(name, { ...properties, mode });
 }
