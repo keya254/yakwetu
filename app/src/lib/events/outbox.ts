@@ -43,10 +43,27 @@ interface DrainState {
 const globalForDrain = globalThis as unknown as { yakwetuDrain?: DrainState };
 const drain: DrainState = (globalForDrain.yakwetuDrain ??= { running: false, wake: null, lastPrune: 0 });
 
+type OutboxWriter = Pick<typeof prisma, "eventOutbox">;
+
 /** Writes events to the outbox (a duplicate id is ignored: retries are safe) and nudges the drain. */
 export async function enqueueEvents(envelopes: EventEnvelope[]): Promise<number> {
+  const count = await writeOutbox(prisma, envelopes);
+  kickDrain();
+  return count;
+}
+
+/**
+ * The same, inside a caller's transaction: the events commit or roll back with
+ * the change they describe (a payment's new state and its payment.succeeded).
+ * Call kickDrain() after the transaction commits.
+ */
+export async function enqueueEventsInTransaction(tx: OutboxWriter, envelopes: EventEnvelope[]): Promise<number> {
+  return writeOutbox(tx, envelopes);
+}
+
+async function writeOutbox(client: OutboxWriter, envelopes: EventEnvelope[]): Promise<number> {
   if (envelopes.length === 0) return 0;
-  const { count } = await prisma.eventOutbox.createMany({
+  const { count } = await client.eventOutbox.createMany({
     data: envelopes.map((envelope) => ({
       id: envelope.id,
       type: envelope.type,
@@ -56,7 +73,6 @@ export async function enqueueEvents(envelopes: EventEnvelope[]): Promise<number>
     })),
     skipDuplicates: true,
   });
-  kickDrain();
   return count;
 }
 

@@ -6,6 +6,8 @@
  * Exchanges, one per area of work:
  *   yakwetu.activity  what people do: pages, films, trailers, accounts, watching
  *   yakwetu.commerce  money: cart, checkout, payment, purchase
+ *   yakwetu.delay     internal timers (payment.check): held for a TTL, then
+ *                     dead-lettered to the payments worker; never analytics
  *
  * Adding an event: add it here (the relay rejects unknown names), then emit
  * it with `track()` in the browser or `emitServerEvent()` on the server.
@@ -13,7 +15,7 @@
  * (movie.*, video.*, checkout.*, payment.succeeded, …).
  */
 
-export type EventExchange = "yakwetu.activity" | "yakwetu.commerce";
+export type EventExchange = "yakwetu.activity" | "yakwetu.commerce" | "yakwetu.delay";
 
 interface EventSpec {
   exchange: EventExchange;
@@ -30,10 +32,10 @@ const activity = <S extends EventSpec["source"]>(source: S, description: string,
   status,
   description,
 });
-const commerce = <S extends EventSpec["source"]>(source: S, description: string) => ({
+const commerce = <S extends EventSpec["source"]>(source: S, description: string, status: EventSpec["status"] = "live") => ({
   exchange: "yakwetu.commerce" as const,
   source,
-  status: "planned" as EventSpec["status"],
+  status,
   description,
 });
 
@@ -64,13 +66,24 @@ export const EVENTS = {
   "watch.progress": activity("browser", "Paid film progress: movieId, progress, watchedMs.", "planned"),
   "watch.completed": activity("server", "Finished a paid film (server-checked).", "planned"),
 
-  // ── Money ──
-  "cart.added": commerce("browser", "Added to cart: cartId, movieIds, totalKes."),
-  "checkout.started": commerce("server", "Checkout opened: cartId, movieIds, reference."),
-  "payment.submitted": commerce("server", "Paystack transaction initialised: reference, channel."),
-  "payment.failed": commerce("server", "Paystack says it failed: reference, reason."),
-  "payment.succeeded": commerce("server", "Paystack confirmed: reference, amountKes, movieIds."),
-  "purchase.confirmed": commerce("server", "Films unlocked for the viewer: movieIds."),
+  // ── Money ── (server events are written in the same transaction as the payment change)
+  "cart.added": commerce("browser", "Added to cart: movieIds, totalKes.", "planned"),
+  "checkout.started": commerce("server", "Order created: orderId, movieIds, totalKes, nudgeId."),
+  "checkout.cancelled": commerce("browser", "Closed the Paystack window without paying: reference, orderId."),
+  "payment.submitted": commerce("server", "Paystack transaction initialised: reference, orderId, amountKes."),
+  "payment.failed": commerce("server", "Paystack verified a failure: reference, reason (classified), gatewayResponse, channel."),
+  "payment.abandoned": commerce("server", "Never completed within the window: reference, orderId, movieIds."),
+  "payment.succeeded": commerce("server", "Paystack verified the payment: reference, orderId, amountKes, channel, movieIds, nudgeId."),
+  "purchase.confirmed": commerce("server", "Films unlocked (entitlements written): orderId, movieIds."),
+  "nudge.opened": commerce("server", "A nudge link was opened (first time): nudgeId, scenario, step, movieIds, discountPct."),
+
+  // ── Internal timers (yakwetu.delay: not analytics, never in PostHog) ──
+  "payment.check": {
+    exchange: "yakwetu.delay",
+    source: "server",
+    status: "live",
+    description: "Re-verify a payment with Paystack after the delay queue's TTL (lost webhooks, late M-Pesa settlement).",
+  },
 } as const satisfies Record<string, EventSpec>;
 
 export type EventType = keyof typeof EVENTS;
