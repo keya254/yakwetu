@@ -121,3 +121,29 @@ model Movie {
   @@index([trendingRank])
   @@map("movie")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Events — the transactional outbox. Every captured event is written here
+// first; a drain loop publishes it to RabbitMQ and stamps publishedAt. If the
+// broker is down, or the process dies between the write and the publish, the
+// row waits and goes out later. Nothing is lost.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model EventOutbox {
+  /// The event id (uuid). Also the AMQP messageId, so consumers can dedupe.
+  id          String    @id
+  type        String
+  exchange    String
+  /// The full envelope, exactly as it will be published.
+  payload     Json
+  occurredAt  DateTime
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+  /// A drain claims rows until this time; a crashed drain's claim simply expires.
+  lockedUntil DateTime?
+  lastError   String?
+
+  @@index([publishedAt, createdAt])
+  @@map("event_outbox")
+}
