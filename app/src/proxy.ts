@@ -17,5 +17,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/browse/:path*", "/movie/:path*"],
+  // Movie pages are public; playing a film asks for an account in place.
+  matcher: ["/browse/:path*"],
 };

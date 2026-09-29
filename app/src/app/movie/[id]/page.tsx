@@ -7,10 +7,12 @@ import { Poster } from "@/components/movie/poster";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
-import { requireSession } from "@/lib/auth";
-import { getMovie } from "@/lib/catalog/queries";
+import { VideoBox } from "@/components/video/video-box";
+import { getSession } from "@/lib/auth";
+import { getMovie, getSimilar } from "@/lib/catalog/queries";
 import { getMoreLikeThis } from "@/lib/catalog/recommended";
 import { formatKes, formatRuntime, genreLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export async function generateMetadata({ params }: PageProps<"/movie/[id]">): Promise<Metadata> {
   const movie = await getMovie((await params).id);
@@ -19,10 +21,11 @@ export async function generateMetadata({ params }: PageProps<"/movie/[id]">): Pr
 
 export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
   const { id } = await params;
-  const session = await requireSession(`/movie/${id}`);
-  const movie = await getMovie(id);
+  // Open to everyone: a shared film link should show the film. Playing it
+  // asks a signed-out viewer to sign up (the VideoBox's dialog).
+  const [session, movie] = await Promise.all([getSession(), getMovie(id)]);
   if (!movie) notFound();
-  const similar = await getMoreLikeThis(session.user.id, movie);
+  const similar = session ? (await getMoreLikeThis(session.user.id, movie)).movies : await getSimilar(movie.id, movie.genres);
 
   const facts = [movie.year, formatRuntime(movie.runtimeMin), movie.rated].filter(Boolean);
   const genres = movie.genres.filter((genre) => genre !== "short");
@@ -37,8 +40,16 @@ export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
           )}
           <div className="absolute inset-0 -z-10 bg-gradient-to-b from-background/30 via-background/70 to-background" />
           <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[260px_1fr] lg:px-8 lg:py-16">
-            <Poster title={movie.title} posterUrl={movie.posterUrl} year={movie.year} priority sizes="260px" className="w-52 rounded-lg ring-1 ring-foreground/10 md:w-full" />
-            <div className="max-w-2xl">
+            {/* On phones the video's still does the poster's job, so the poster only shows beside it from md up. */}
+            <Poster
+              title={movie.title}
+              posterUrl={movie.posterUrl}
+              year={movie.year}
+              priority
+              sizes="260px"
+              className={cn("w-52 rounded-lg ring-1 ring-foreground/10 md:w-full", movie.youtubeId && "hidden md:block")}
+            />
+            <div className="min-w-0 max-w-2xl">
               <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
               <h1 className="mt-2 text-4xl leading-[1.05] font-extrabold tracking-[-0.03em] sm:text-5xl">{movie.title}</h1>
               <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -54,6 +65,10 @@ export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
                   </span>
                 )}
               </div>
+
+              {movie.youtubeId && (
+                <VideoBox movieId={movie.id} videoId={movie.youtubeId} title={movie.title} signedIn={Boolean(session)} className="mt-6" />
+              )}
 
               <p className="mt-6 text-2xl font-bold text-primary tabular-nums">{formatKes(movie.priceKes)}</p>
               <p className="text-sm text-muted-foreground">One payment. Yours to watch, no subscription.</p>
@@ -71,7 +86,7 @@ export default async function MoviePage({ params }: PageProps<"/movie/[id]">) {
         </section>
 
         <div className="mt-12">
-          <MovieRow title="More like this" movies={similar.movies} />
+          <MovieRow title="More like this" movies={similar} />
         </div>
       </main>
       <SiteFooter />
