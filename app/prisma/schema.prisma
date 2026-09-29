@@ -147,3 +147,112 @@ model EventOutbox {
   @@index([publishedAt, createdAt])
   @@map("event_outbox")
 }
+
+model Order {
+  id          String    @id @default(cuid())
+  userId      String
+  movieIds    String[]
+  subtotalKes Int
+  discountKes Int       @default(0)
+  totalKes    Int
+  /// open | paid | expired
+  status      String    @default("open")
+  /// The nudge (resume or cart link) that brought the viewer here, for attribution.
+  nudgeId     String?
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  payments Payment[]
+
+  @@index([userId, createdAt])
+  @@map("order")
+}
+
+
+model Payment {
+  reference       String    @id
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId          String
+  amountKes       Int
+  /// created | pending | succeeded | failed | abandoned
+  status          String    @default("created")
+  /// mobile_money | card | …, as Paystack reports it
+  channel         String?
+  gatewayResponse String?
+  /// Classified: insufficient_funds | wrong_pin | timeout_or_cancel | limit_exceeded | declined | amount_mismatch | init_error
+  failureReason   String?
+  paystackId      String?
+  accessCode      String?
+  /// This order was already paid by another payment: flag for refund.
+  duplicate       Boolean   @default(false)
+  /// How many delayed checks have looked at it (RabbitMQ payment.check).
+  checks          Int       @default(0)
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@map("payment")
+}
+
+
+model PaymentWebhook {
+  id          String    @id
+  event       String
+  reference   String?
+  payload     Json
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?
+
+  @@index([processedAt, receivedAt])
+  @@map("payment_webhook")
+}
+
+/// A film the viewer may watch. One row per viewer and film, so paying twice
+/// never unlocks twice.
+model Entitlement {
+  userId    String
+  movieId   String
+  reference String
+  createdAt DateTime @default(now())
+
+  @@id([userId, movieId])
+  @@index([reference])
+  @@map("entitlement")
+}
+
+/// A message n8n sent with a link back to checkout (payment rescue, abandoned
+/// checkout, post-watch…). The link carries a signed token for this row, so
+/// n8n can't invent a price and a forwarded link can't be reused: the discount
+/// lives here, the link works once, and it expires. When a payment from it
+/// succeeds, settlement marks it converted in the same transaction.
+model Nudge {
+  id          String    @id @default(cuid())
+  userId      String
+  /// A (abandoned checkout) | B (payment rescue) | C (post-watch) | welcome
+  scenario    String
+  /// Which step of the scenario (first message, incentive…).
+  step        String    @default("first")
+  channel     String    @default("sms")
+  movieIds    String[]
+  /// The order this nudge resumes (Scenario B), if any.
+  orderId     String?
+  discountPct Int       @default(0)
+  code        String?
+  message     String?
+  expiresAt   DateTime
+  openedAt    DateTime?
+  convertedAt DateTime?
+  revenueKes  Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+  @@map("nudge")
+}
