@@ -1,0 +1,781 @@
+{
+  "name": "YKW 04 \u2014 Post-Purchase Upsell \u00b7 v2 (RabbitMQ)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "c5c79c21-5a87-4163-be99-e7412fdff4a7",
+      "name": "Note 5d7596",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -500
+      ],
+      "parameters": {
+        "content": "## YKW 04 \u2014 post-purchase upsell\n\nCustomer story:\n1. Purchase confirmed \u2192 short wait (demo ~1s)\n2. Load viewer \u2192 skip if no contact\n3. Recs \u2192 bundle offer link\n4. **OpenRouter** personalises upsell copy (template fallback)\n5. **Notify via API**\n6. Wait \u2192 if unused \u2192 last-call Notify\n\nSend only via `/api/internal/notify`.\nNeeds: `OPENROUTER_*`, `YAKWETU_API_URL`, `INTERNAL_API_KEY`\n",
+        "width": 560,
+        "height": 500,
+        "color": 4
+      }
+    },
+    {
+      "id": "1be1d367-52ce-4657-aa65-aac0a5228a28",
+      "name": "Purchase confirmed (RabbitMQ)",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "queue": "q.n8n.post-purchase",
+        "options": {
+          "acknowledge": "executionFinishesSuccessfully",
+          "jsonParseBody": true,
+          "onlyContent": true,
+          "parallelMessages": 5
+        }
+      },
+      "credentials": {
+        "rabbitmq": {
+          "id": "0XUkvX0FdyyHYkKN",
+          "name": "RabbitMQ account"
+        }
+      }
+    },
+    {
+      "id": "fcaa732b-2bfe-4ffb-ac81-41bf11f84019",
+      "name": "Give them tonight",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const DEMO = true;\nconst DEMO_DELAY_SECONDS = 1;\nconst OPEN = 15;\nconst CLOSE = 21;\nconst now = new Date();\nif (DEMO) {\n    return [{ json: { ...$input.first().json, sendAt: new Date(now.getTime() + DEMO_DELAY_SECONDS * 1000).toISOString(), demo: true } }];\n}\nconst nairobi = new Date(now.toLocaleString(\"en-US\", { timeZone: \"Africa/Nairobi\" }));\nconst offset = now.getTime() - nairobi.getTime();\nconst tomorrow = new Date(nairobi.getFullYear(), nairobi.getMonth(), nairobi.getDate() + 1, OPEN, Math.floor(Math.random() * 60));\nvoid CLOSE;\nreturn [{ json: { ...$input.first().json, sendAt: new Date(tomorrow.getTime() + offset).toISOString(), demo: false } }];"
+      }
+    },
+    {
+      "id": "0e5f968a-c4bb-4447-a1ba-5fbd7280c266",
+      "name": "Wait until the next evening",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $json.sendAt }}"
+      },
+      "webhookId": "4c6c6560-0b56-4fc3-b72a-01cb0193fd18"
+    },
+    {
+      "id": "2e7a9ad5-0ea2-4b45-9a3f-93df04aac99a",
+      "name": "Order & viewer (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/orders/' + encodeURIComponent($('Purchase confirmed (RabbitMQ)').item.json.properties?.orderId || $('Purchase confirmed (RabbitMQ)').item.json.orderId || 'latest') + '?userId=' + encodeURIComponent($('Purchase confirmed (RabbitMQ)').item.json.userId || $('Purchase confirmed (RabbitMQ)').item.json.user_id || '') + '&email=' + encodeURIComponent($('Purchase confirmed (RabbitMQ)').item.json.properties?.email || $('Purchase confirmed (RabbitMQ)').item.json.email || '') + '&phone=' + encodeURIComponent($('Purchase confirmed (RabbitMQ)').item.json.properties?.phone || $('Purchase confirmed (RabbitMQ)').item.json.phone || '') + '&movieId=' + encodeURIComponent($('Purchase confirmed (RabbitMQ)').item.json.properties?.movieId || '') + '&movieTitle=' + encodeURIComponent($('Purchase confirmed (RabbitMQ)').item.json.properties?.movieTitle || '') + '&name=' + encodeURIComponent($('Purchase confirmed (RabbitMQ)').item.json.properties?.name || $('Purchase confirmed (RabbitMQ)').item.json.name || '') }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e873f3d6-1898-413b-9ade-1ff876271dfe",
+      "name": "Reachable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f094c6af-9d5d-4c45-86a9-1ab6101179b6",
+              "leftValue": "={{ Boolean($json.user?.phone || $json.user?.email) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "22bcdd8b-6528-4026-b873-c08f5eeb11e9",
+      "name": "No contact: skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "62f22402-a024-4784-b0cf-711d232f37d1",
+      "name": "What to watch next (sinema-recs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        -80
+      ],
+      "parameters": {
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/recs/' + encodeURIComponent($('Order & viewer (storefront)').item.json.user.id) }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "mode",
+              "value": "next"
+            },
+            {
+              "name": "anchor",
+              "value": "={{ $json.order.movieIds[0] }}"
+            },
+            {
+              "name": "exclude",
+              "value": "={{ $json.ownedMovieIds.concat($json.order.movieIds).join(',') }}"
+            },
+            {
+              "name": "limit",
+              "value": "4"
+            },
+            {
+              "name": "log",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        }
+      },
+      "notes": "If the recommender is down this answers empty and the offer falls back to the cart film alone.",
+      "notesInFlow": true
+    },
+    {
+      "id": "da88a643-53ea-4519-b01c-a77006ff72f5",
+      "name": "Pick the bundle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const info = $(\"Order & viewer (storefront)\").first().json;\nconst picks = ($input.first().json?.data?.items ?? []).filter((item) => !(info.order?.movieIds || []).includes(item.movieId) && !(info.ownedMovieIds || []).includes(item.movieId));\nconst chosen = picks.slice(0, 2);\nreturn [\n    {\n        json: {\n            userId: info.user.id,\n            boughtTitle: (info.films || [])[0]?.title ?? \"your film\",\n            boughtGenres: (info.films || [])[0]?.genres ?? [],\n            movieIds: chosen.map((item) => item.movieId),\n            hasPicks: chosen.length > 0,\n            why: chosen[0]?.why ?? null,\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "052d47fd-c26c-4f67-a11a-8801b429e352",
+      "name": "Anything to offer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "26225f9c-8c56-41df-b15e-21b79f1861b9",
+              "leftValue": "={{ $json.hasPicks }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "41820356-8750-4acd-bbe4-d6081b6ad4de",
+      "name": "Nothing new to offer",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        80
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b5a078f2-c31d-45d7-8415-26517c49d9e9",
+      "name": "Bundle link (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/nudges' }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $json.userId, scenario: 'C', step: 'first', movieIds: $json.movieIds, discountPct: 20, ttlMinutes: 1440 }) }}",
+        "options": {}
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ff9396e4-aa48-46ac-bef0-621d1459b7dd",
+      "name": "Link created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        -160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "link-ok-Link created?",
+              "leftValue": "={{ $json.nudgeId || ($json.body && $json.body.nudgeId) || ($json.data && $json.data.nudgeId) || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "db6c86b6-1f68-4020-a169-32be63dd4bb8",
+      "name": "Capped",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c44460d8-b59e-4818-8e4a-51ecb358819a",
+      "name": "Upsell facts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -240
+      ],
+      "parameters": {
+        "jsCode": "const info = $(\"Order & viewer (storefront)\").first().json;\nconst bundle = $(\"Pick the bundle\").first().json;\nconst link = $input.first().json;\nconst films = Array.isArray(link.films) ? link.films : [];\nconst titles = films.map((film) => film.title);\nconst first = (info.user && info.user.firstName) || 'there';\nconst poster = (films[0] && (films[0].poster || films[0].posterUrl || films[0].image)) || '';\nconst bundleTitle = titles.join(' + ');\nreturn [{\n  json: {\n    userId: info.user.id,\n    phone: info.user.phone,\n    email: info.user.email || '',\n    name: (info.user && info.user.name) || first,\n    channelPref: info.user.channelPref || info.user.channel_pref || 'both',\n    subject: `Since you watched ${bundle.boughtTitle} \u2014 ${bundleTitle}`,\n    scenario: 'C_upsell',\n    firstName: first,\n    boughtTitle: bundle.boughtTitle,\n    filmTitle: bundle.boughtTitle,\n    genre: bundle.boughtGenres[0] ?? \"film\",\n    pickTitles: titles,\n    bundleTitle,\n    totalKes: link.totalKes,\n    priceKes: link.totalKes,\n    discountPct: link.discountPct,\n    url: link.url,\n    ctaUrl: link.url,\n    ctaLabel: 'Unlock this bundle',\n    imageUrl: poster,\n    films,\n    nudgeId: link.nudgeId,\n    movieIds: films.map((film) => film.id),\n    alternative: \"\",\n    fallback: `Loved ${bundle.boughtTitle}, ${first}? Keep going with ${bundleTitle} \u2014 KES ${link.totalKes} (${link.discountPct}% off) this week:`,\n  },\n}];"
+      }
+    },
+    {
+      "id": "79f1284f-ed6e-481f-9585-2c0d94c0d306",
+      "name": "Guard the copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -240
+      ],
+      "parameters": {
+        "jsCode": "const facts = $(\"Upsell facts\").first().json;\nconst ai = $input.first().json ?? {};\nconst text = String(ai.output?.message ?? ai.text ?? \"\").trim();\nlet fallbackReason = null;\nif (!text)\n    fallbackReason = ai.error ? \"AI error\" : \"no AI answer\";\nelse if (text.length > 120)\n    fallbackReason = \"too long\";\nelse if (/https?:|www\\.|\\.com|\\.app/i.test(text))\n    fallbackReason = \"contains a link\";\nelse {\n    const prices = [...text.matchAll(/KES\\s?([\\d,]+)/gi)].map((match) => Number(match[1].replace(/,/g, \"\")));\n    if (prices.some((price) => price !== facts.totalKes))\n        fallbackReason = \"wrong price\";\n}\nconst body = fallbackReason ? facts.fallback : text;\nreturn [{ json: { ...facts, message: `${body} ${facts.url}`.trim(), aiUsed: !fallbackReason, fallbackReason } }];"
+      }
+    },
+    {
+      "id": "d0b64ccd-bbe1-4574-9fc8-50acd1cfdd83",
+      "name": "Wait 1 second (demo; 24 h live)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3600,
+        -240
+      ],
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds",
+        "resume": "timeInterval"
+      },
+      "webhookId": "eafe0c98-aa9c-40b7-8d5a-d328253543f0"
+    },
+    {
+      "id": "b7882154-0d68-4ce5-b764-91f41078c622",
+      "name": "Used yet? (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        -240
+      ],
+      "parameters": {
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/nudges/' + $('Guard the copy').item.json.nudgeId }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e13063da-5cc8-4a54-9a8e-56f6b3090e55",
+      "name": "Still open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4080,
+        -240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "91ecf7c0-19c9-4f15-a794-8915f10be464",
+              "leftValue": "={{ !$json.converted && !$json.ownsAll && !$json.expired }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "469ba252-e1f6-469f-9b6b-cae5af261492",
+      "name": "Bought: done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        -80
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "6c49e116-6f17-483b-85b8-80fd437f017f",
+      "name": "Write the last call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        -320
+      ],
+      "parameters": {
+        "jsCode": "const sent = $(\"Guard the copy\").first().json;\nconst titles = Array.isArray(sent.pickTitles) ? sent.pickTitles.join(\" + \") : (sent.bundleTitle || 'your bundle');\nconst message = `Last call, ${sent.firstName}: ${titles} at KES ${sent.totalKes} ends soon \u2014 ${sent.url}`;\nreturn [{ json: {\n  ...sent,\n  scenario: 'C_last_call',\n  subject: `Last call: ${titles} offer ending soon`,\n  message,\n  filmTitle: sent.boughtTitle || sent.filmTitle,\n  bundleTitle: titles,\n  ctaLabel: 'Get it before it expires',\n  badge: 'Ending soon',\n}}];"
+      }
+    },
+    {
+      "id": "7af533a7-b5ee-4f92-86fa-0c492773a502",
+      "name": "OpenRouter copy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -240
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1') + '/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'http://localhost:18080' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu Sinema"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.7, max_tokens: 120, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: \"You write one SMS upsell after a Yakwetu purchase. Return JSON {\\\"message\\\": \\\"...\\\"}. Max 110 chars. Warm. Use only given facts. No links/emojis. End ready for an offer link.\" },{ role: 'user', content: 'First name: ' + String($json.firstName||'') + '\\n' + 'Bought: ' + String($json.boughtTitle||'') + '\\nGenre: ' + String($json.genre||'') + '\\nBundle: ' + (Array.isArray($json.pickTitles)?$json.pickTitles.join(' + '):String($json.pickTitles||'')) + '\\nPrice: KES ' + String($json.totalKes) + ' (' + String($json.discountPct) + '% off)' }] }) }}",
+        "options": {
+          "timeout": 25000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "1786c3bd-4aff-469b-9c2c-ba26b3d72443",
+      "name": "Parse OpenRouter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -240
+      ],
+      "parameters": {
+        "jsCode": "let message = '';\ntry {\n  const raw = $input.first().json || {};\n  const content = raw.choices?.[0]?.message?.content || raw.message || '';\n  if (typeof content === 'string' && content.trim().startsWith('{')) {\n    const parsed = JSON.parse(content);\n    message = String(parsed.message || parsed.text || '').trim();\n  } else {\n    message = String(content || '').trim();\n  }\n} catch (e) { message = ''; }\nreturn [{ json: { output: { message }, text: message } }];"
+      }
+    },
+    {
+      "id": "b535b8d2-db85-41ce-b6cb-e6fcf6769e64",
+      "name": "API already sent (skip n8n notify)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        -120
+      ],
+      "parameters": {},
+      "notesInFlow": true,
+      "notes": "Customer SMS/email is sent by paystack-api when the event is ingested. n8n must not send again (prevents 4x duplicates)."
+    }
+  ],
+  "connections": {
+    "Purchase confirmed (RabbitMQ)": {
+      "main": [
+        [
+          {
+            "node": "Give them tonight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Give them tonight": {
+      "main": [
+        [
+          {
+            "node": "Wait until the next evening",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait until the next evening": {
+      "main": [
+        [
+          {
+            "node": "Order & viewer (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order & viewer (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Reachable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reachable?": {
+      "main": [
+        [
+          {
+            "node": "What to watch next (sinema-recs)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No contact: skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What to watch next (sinema-recs)": {
+      "main": [
+        [
+          {
+            "node": "Pick the bundle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick the bundle": {
+      "main": [
+        [
+          {
+            "node": "Anything to offer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to offer?": {
+      "main": [
+        [
+          {
+            "node": "Bundle link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing new to offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bundle link (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Link created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link created?": {
+      "main": [
+        [
+          {
+            "node": "Upsell facts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsell facts": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard the copy": {
+      "main": [
+        [
+          {
+            "node": "API already sent (skip n8n notify)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait 1 second (demo; 24 h live)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 second (demo; 24 h live)": {
+      "main": [
+        [
+          {
+            "node": "Used yet? (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Used yet? (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Still open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still open?": {
+      "main": [
+        [
+          {
+            "node": "Write the last call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bought: done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the last call": {
+      "main": [
+        [
+          {
+            "node": "API already sent (skip n8n notify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter copy": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Guard the copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

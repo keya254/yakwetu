@@ -1,0 +1,646 @@
+{
+  "name": "YKW 02 \u2014 Browse & Cart Abandonment Recovery \u00b7 v2 (RabbitMQ)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "3e9fa13c-4379-4ea5-88eb-220e25a49928",
+      "name": "Note 60fa98",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -500
+      ],
+      "parameters": {
+        "content": "## YKW 02 \u2014 abandon recovery\n\n1. RabbitMQ `q.n8n.checkout-abandoned`\n2. Normalize \u2192 DEMO send window\n3. Order/viewer \u2192 skip if paid/owned/no contact\n4. Recs \u2192 bundle \u2192 offer link\n5. **OpenRouter** personalises SMS/email copy (template fallback if key/AI fails)\n6. **Notify via API** (email preferred, SMS fallback)\n\nn8n env needed: `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `YAKWETU_API_URL`, `INTERNAL_API_KEY`",
+        "width": 380,
+        "height": 480,
+        "color": 4
+      }
+    },
+    {
+      "id": "0022dee5-ed23-479f-80dd-6a2bf56999b8",
+      "name": "Checkout abandoned (RabbitMQ)",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "queue": "q.n8n.checkout-abandoned",
+        "options": {
+          "acknowledge": "executionFinishesSuccessfully",
+          "jsonParseBody": true,
+          "onlyContent": true,
+          "parallelMessages": 5
+        }
+      },
+      "credentials": {
+        "rabbitmq": {
+          "id": "0XUkvX0FdyyHYkKN",
+          "name": "RabbitMQ account"
+        }
+      }
+    },
+    {
+      "id": "fd5c44b4-e19b-4f2b-a89e-ecbb95680118",
+      "name": "Send window (15:00\u201321:00)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const DEMO = true; // set false for live quiet hours\nconst OPEN = 15;\nconst CLOSE = 21;\nconst now = new Date();\nif (DEMO) {\n  return [{ json: { ...$input.first().json, sendWindow: 'DEMO (no hold)', holdUntilWindow: false, waitMinutes: 0, sendAt: now.toISOString(), demo: true } }];\n}\nconst parts = Object.fromEntries(new Intl.DateTimeFormat(\"en-GB\", { timeZone: \"Africa/Nairobi\", hour: \"numeric\", minute: \"numeric\", hourCycle: \"h23\" })\n    .formatToParts(now)\n    .map((part) => [part.type, part.value]));\nconst hour = Number(parts.hour) + Number(parts.minute) / 60;\nlet waitMinutes = 0;\nif (hour < OPEN)\n    waitMinutes = Math.ceil((OPEN - hour) * 60);\nelse if (hour >= CLOSE)\n    waitMinutes = Math.ceil((24 - hour + OPEN) * 60);\nreturn [\n    {\n        json: {\n            ...$input.first().json,\n            sendWindow: `${OPEN}:00\u2013${CLOSE}:00 Nairobi`,\n            holdUntilWindow: waitMinutes > 0,\n            waitMinutes,\n            sendAt: new Date(now.getTime() + waitMinutes * 60_000).toISOString(),\n            demo: false,\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "11eea7e0-9138-4b49-8ab3-7bb5a3a7e7fa",
+      "name": "Outside the window?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "167bcddb-63b8-4b89-8424-961b56e9a5c8",
+              "leftValue": "={{ $json.holdUntilWindow }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "33667305-e192-4a8e-abe5-476743f936e9",
+      "name": "Hold until 15:00",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        -140
+      ],
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $json.sendAt }}"
+      },
+      "webhookId": "f6dfcfbc-67e8-4722-85ba-327ad224021a"
+    },
+    {
+      "id": "51e408be-ad83-4f7a-b687-c4008d038362",
+      "name": "Order & viewer (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/orders/' + encodeURIComponent($('Normalize abandon').item.json.orderId || 'latest') + '?userId=' + encodeURIComponent($('Normalize abandon').item.json.userId || '') + '&email=' + encodeURIComponent($('Normalize abandon').item.json.email || '') + '&phone=' + encodeURIComponent($('Normalize abandon').item.json.phone || '') + '&movieId=' + encodeURIComponent($('Normalize abandon').item.json.movieId || '') + '&movieTitle=' + encodeURIComponent($('Normalize abandon').item.json.movieTitle || '') + '&name=' + encodeURIComponent($('Normalize abandon').item.json.name || '') }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "01b411a7-c1cc-45da-804b-f40467f2aab4",
+      "name": "Worth a message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "worth",
+              "leftValue": "={{ Boolean($json.order && $json.order.paid !== true && $json.ownsAll !== true && (($json.user && ($json.user.phone || $json.user.email)) || $json.phone || $json.email)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "130737e4-4890-4436-a66b-4dfe3e7c06e6",
+      "name": "Nothing to send",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b4eb1f67-a57a-4398-a0ae-5caff30ec342",
+      "name": "Closest film to the cart (sinema-recs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        -80
+      ],
+      "parameters": {
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/recs/' + encodeURIComponent(($json.user && ($json.user.id || $json.user.user_id)) || $('Normalize abandon').item.json.userId || 'anon') }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "mode",
+              "value": "browse"
+            },
+            {
+              "name": "anchor",
+              "value": "={{ ($json.order && $json.order.movieIds && $json.order.movieIds[0]) || $('Normalize abandon').item.json.movieId || '' }}"
+            },
+            {
+              "name": "exclude",
+              "value": "={{ ($json.order && Array.isArray($json.order.movieIds) ? $json.order.movieIds : []).join(',') }}"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        }
+      },
+      "notes": "If the recommender is down this answers empty and the offer falls back to the cart film alone.",
+      "notesInFlow": true,
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "57e78504-4aa2-4fae-abef-664ee5101792",
+      "name": "Build the bundle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const info = $(\"Order & viewer (storefront)\").first().json || {};\nconst event = $(\"Normalize abandon\").first().json || {};\nconst order = info.order || {};\nconst user = info.user || {};\nconst cartIds = Array.isArray(order.movieIds) ? order.movieIds.filter(Boolean) : [];\nconst fallbackId = event.movieId || (event.properties && event.properties.movieId) || 'nairobi-half-life';\nconst baseIds = cartIds.length ? cartIds : [fallbackId];\nconst raw = $input.first().json || {};\nconst picks = (raw.data && Array.isArray(raw.data.items) ? raw.data.items : [])\n  .filter((item) => item && item.movieId && !baseIds.includes(item.movieId) && !(info.ownedMovieIds || []).includes(item.movieId));\nconst pick = picks[0] || null;\nconst movieIds = pick ? [baseIds[0], pick.movieId].filter(Boolean) : baseIds;\nif (!movieIds.length) {\n  return [{ json: { userId: user.id || event.userId || null, orderId: order.id || event.orderId || null, movieIds: [fallbackId], discountPct: 10, pick: null, error: 'no_movies_fallback' } }];\n}\nreturn [{\n  json: {\n    userId: user.id || event.userId || null,\n    orderId: order.id || event.orderId || null,\n    movieIds,\n    discountPct: pick ? 20 : 10,\n    pick: pick ? { title: pick.title, reason: pick.reason, genres: pick.genres, why: pick.why || null } : null,\n  },\n}];"
+      }
+    },
+    {
+      "id": "0f81acb2-a279-40c8-b1ec-6545580b3d0a",
+      "name": "Offer link (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/nudges' }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $json.userId, orderId: $json.orderId, scenario: 'A_abandon', step: 'first', movieIds: $json.movieIds, discountPct: $json.discountPct, ttlMinutes: 60 }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0cbe4cd1-fdf5-4880-b388-0015c1114822",
+      "name": "Link created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "link-ok",
+              "leftValue": "={{ $json.nudgeId || ($json.body && $json.body.nudgeId) || ($json.data && $json.data.nudgeId) || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bc1f0a03-3a28-4a46-9473-998992549128",
+      "name": "Capped or not needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        80
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "33ddaae1-5b6d-4b99-a46c-d7cd448ddce3",
+      "name": "Offer facts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "const info = $(\"Order & viewer (storefront)\").first().json || {};\nconst event = $(\"Normalize abandon\").first().json || {};\nconst bundle = $(\"Build the bundle\").first().json || {};\nconst raw = $(\"Offer link (storefront)\").first().json || {};\nconst link = (raw && raw.nudgeId) ? raw : (raw.body || raw.data || raw);\nconst films = Array.isArray(link.films) ? link.films : [];\nconst [cart, extra] = films;\nconst user = info.user || {};\nconst first = user.firstName || 'there';\nconst cartTitle = (cart && cart.title) || (info.order && info.order.movieTitle) || event.movieTitle || 'your film';\nconst pickTitle = (extra && extra.title) || (bundle.pick && bundle.pick.title) || null;\nconst pickReason = (bundle.pick && (bundle.pick.reason || (bundle.pick.why && bundle.pick.why.matchedGenres && bundle.pick.why.matchedGenres.join(', ')))) || '';\nconst poster = (cart && (cart.poster || cart.posterUrl || cart.image)) || (extra && (extra.poster || extra.posterUrl)) || '';\nconst subject = pickTitle\n  ? `${first}, ${cartTitle} + ${pickTitle} \u2014 still waiting`\n  : `${first}, ${cartTitle} is still waiting for you`;\nconst body = pickTitle\n  ? `Hi ${first} \u2014 ${cartTitle} is saved in your cart. Grab it with ${pickTitle} for KES ${link.totalKes} (${link.discountPct}% off this hour):`\n  : `Hi ${first} \u2014 ${cartTitle} is still waiting. Finish for KES ${link.totalKes} (${link.discountPct}% off this hour):`;\nconst url = link.url || '';\nconst message = `${body} ${url}`.trim();\nreturn [{\n  json: {\n    userId: user.id || event.userId || null,\n    orderId: (info.order && info.order.id) || event.orderId || null,\n    phone: user.phone || event.phone || '',\n    email: user.email || event.email || '',\n    name: user.name || event.name || first,\n    channelPref: user.channelPref || user.channel_pref || event.channel_pref || 'both',\n    subject,\n    scenario: 'A_abandon',\n    firstName: first,\n    filmTitle: cartTitle,\n    cartTitle,\n    title: cartTitle,\n    pickTitle,\n    pickReason,\n    bundleTitle: pickTitle,\n    totalKes: link.totalKes,\n    priceKes: link.totalKes,\n    discountPct: link.discountPct,\n    url,\n    ctaUrl: url,\n    ctaLabel: 'Finish checkout',\n    imageUrl: poster,\n    films,\n    nudgeId: link.nudgeId,\n    movieIds: films.map((f) => f.id),\n    message,\n    fallback: body,\n    alternative: '',\n  },\n}];"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\nlet j = raw;\nif (typeof raw.content === 'string') {\n  try { j = JSON.parse(raw.content); } catch (e) { j = raw; }\n} else if (raw.content && typeof raw.content === 'object') {\n  j = raw.content;\n}\nconst props = j.properties || {};\nconst userId = j.userId || j.user_id || props.userId || '';\nconst orderId = j.orderId || props.orderId || '';\nconst email = j.email || props.email || '';\nconst phone = j.phone || props.phone || '';\nconst name = j.name || props.name || '';\nconst movieId = j.movie_id || props.movieId || '';\nconst movieTitle = j.movie_title || props.movieTitle || '';\nreturn [{\n  json: {\n    ...j,\n    userId,\n    user_id: userId,\n    orderId,\n    email,\n    phone,\n    name,\n    movieId,\n    movieTitle,\n    channel_pref: j.channel_pref || props.channelPref || 'both',\n    properties: {\n      ...props,\n      orderId,\n      movieId,\n      movieTitle,\n      email,\n      phone,\n      name,\n      channelPref: j.channel_pref || props.channelPref || 'both',\n    },\n  },\n}];"
+      },
+      "id": "d0992ff1-f12a-4462-8763-f9f8593a1d49",
+      "name": "Normalize abandon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "id": "6aca911c-5dfc-4594-8939-948ff1c09e96",
+      "name": "OpenRouter copy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'http://localhost:18080' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu Sinema"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.7, max_tokens: 140, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'You write one short Yakwetu Sinema abandon nudge (Kenyan pay-per-film). Return JSON {\\\"message\\\": \\\"...\\\"}. Max 110 chars. Warm Kenyan English. Use only given facts (cart film, optional paired rec + why, price, discount). No links, emojis, or hashtags. End so a checkout link reads naturally after it.' },{ role: 'user', content: 'First name: ' + String($json.firstName||'') + '\\n' + 'Cart film: ' + String($json.cartTitle||$json.filmTitle||'') + '\\n' + 'Paired rec: ' + String($json.pickTitle||'none') + '\\n' + 'Why this rec: ' + String($json.pickReason||'') + '\\n' + 'Price: KES ' + String($json.totalKes) + ' (' + String($json.discountPct) + '% off)\\n' + 'Offer ends: 1 hour' }] }) }}",
+        "options": {
+          "timeout": 25000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "7af9adb3-19be-4c75-a184-6477eb918b9f",
+      "name": "Parse OpenRouter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "let message = '';\nlet error = null;\ntry {\n  const raw = $input.first().json || {};\n  if (raw.error || raw.message === 'Unauthorized' || raw.code === 401) {\n    error = String(raw.error || raw.message || 'openrouter_error');\n  }\n  const content = (raw.choices && raw.choices[0] && raw.choices[0].message && raw.choices[0].message.content)\n    || raw.message || '';\n  if (typeof content === 'string' && content.trim().startsWith('{')) {\n    const parsed = JSON.parse(content);\n    message = String(parsed.message || parsed.text || '').trim();\n  } else if (typeof content === 'string' && !error) {\n    message = content.trim();\n  }\n} catch (e) {\n  message = '';\n  error = String(e.message || e);\n}\nreturn [{ json: { output: { message }, text: message, error } }];"
+      }
+    },
+    {
+      "id": "012a57b9-808f-4840-be85-212bf3faa48b",
+      "name": "Guard the copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "const facts = $(\"Offer facts\").first().json || {};\nconst ai = $input.first().json || {};\nconst text = String((ai.output && ai.output.message) || ai.text || '').trim();\nlet fallbackReason = null;\nif (!text)\n  fallbackReason = ai.error ? ('AI error: ' + ai.error) : 'no AI answer';\nelse if (text.length > 120)\n  fallbackReason = 'too long';\nelse if (/https?:|www\\.|\\.com|\\.app/i.test(text))\n  fallbackReason = 'contains a link';\nelse {\n  const prices = [...text.matchAll(/KES\\s?([\\d,]+)/gi)].map((m) => Number(m[1].replace(/,/g, '')));\n  if (facts.totalKes != null && prices.some((p) => p !== Number(facts.totalKes)))\n    fallbackReason = 'wrong price';\n}\nconst body = fallbackReason ? (facts.fallback || facts.message || '') : text;\nconst url = facts.url || '';\nconst message = `${body} ${url}`.trim();\nreturn [{\n  json: {\n    ...facts,\n    message,\n    aiUsed: !fallbackReason,\n    fallbackReason,\n    subject: facts.subject || 'Yakwetu Sinema',\n  },\n}];"
+      }
+    },
+    {
+      "id": "53b9b4c8-cf56-49a8-93d7-b58af3288bdf",
+      "name": "API already sent (skip n8n notify)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3320,
+        -40
+      ],
+      "parameters": {},
+      "notesInFlow": true,
+      "notes": "Customer SMS/email is sent by paystack-api when the event is ingested. n8n must not send again (prevents 4x duplicates)."
+    }
+  ],
+  "connections": {
+    "Checkout abandoned (RabbitMQ)": {
+      "main": [
+        [
+          {
+            "node": "Normalize abandon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send window (15:00\u201321:00)": {
+      "main": [
+        [
+          {
+            "node": "Outside the window?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outside the window?": {
+      "main": [
+        [
+          {
+            "node": "Hold until 15:00",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Order & viewer (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold until 15:00": {
+      "main": [
+        [
+          {
+            "node": "Order & viewer (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order & viewer (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Worth a message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worth a message?": {
+      "main": [
+        [
+          {
+            "node": "Closest film to the cart (sinema-recs)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Closest film to the cart (sinema-recs)": {
+      "main": [
+        [
+          {
+            "node": "Build the bundle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the bundle": {
+      "main": [
+        [
+          {
+            "node": "Offer link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer link (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Link created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link created?": {
+      "main": [
+        [
+          {
+            "node": "Offer facts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capped or not needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer facts": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize abandon": {
+      "main": [
+        [
+          {
+            "node": "Send window (15:00\u201321:00)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter copy": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Guard the copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard the copy": {
+      "main": [
+        [
+          {
+            "node": "API already sent (skip n8n notify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

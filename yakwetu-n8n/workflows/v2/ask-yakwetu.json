@@ -1,0 +1,241 @@
+{
+  "name": "YKW \u00b7 Ask Yakwetu \u2014 staff analytics assistant (chat)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "35198662-56ba-46e4-8b6f-e70db3a9f8fb",
+      "name": "Note ddece2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -520
+      ],
+      "parameters": {
+        "content": "## Ask Yakwetu: plain-language analytics for the team\nSales reps and staff ask questions in a chat (\"How many films did we sell this week?\", \"Which genres are growing?\", \"How much did the rescue SMS recover?\") and get numbers, not dashboards.\n\n- **Chat Trigger** (hosted chat page; only signed-in n8n users).\n- **AI Agent** (gpt-4o-mini) with two tools:\n  - `query_behaviour`: HogQL on PostHog with a **read-only** key (it cannot change anything).\n  - `sales_summary`: revenue, payments, failures and recovery from the storefront (Paystack-verified: the source of truth for money).\n- **Memory** keeps the last few turns, so follow-ups work (\"and last week?\").\n\nThe agent is told the event schema and must answer from tool results only.",
+        "width": 560,
+        "height": 380,
+        "color": 4
+      }
+    },
+    {
+      "id": "b296c429-441e-4c2d-8648-cbfa578492d7",
+      "name": "Staff chat",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "public": true,
+        "mode": "hostedChat",
+        "authentication": "n8nUserAuth",
+        "initialMessages": "Habari! I'm the Yakwetu analyst.\nAsk me about sales, films, genres, payments or how much our nudges recovered.",
+        "options": {
+          "title": "Ask Yakwetu",
+          "subtitle": "Sales and viewing analytics for the team",
+          "inputPlaceholder": "e.g. Top genres this week?"
+        }
+      },
+      "webhookId": "837625df-fc47-4408-852b-bcde4c5358ca"
+    },
+    {
+      "id": "900c7482-8445-4dc3-8dce-eaaad05a418a",
+      "name": "Analyst",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        320,
+        0
+      ],
+      "parameters": {
+        "promptType": "auto",
+        "options": {
+          "systemMessage": "You are the Yakwetu Sinema analyst. Yakwetu sells African films pay-per-title in KES (M-Pesa or card via Paystack). Staff and sales reps ask you questions; answer with numbers from your tools, never from memory or guesses.\n\nTools:\n- sales_summary(days): money, from the storefront. Use it for revenue, sales, payments, failures, M-Pesa vs card, nudges and KES recovered, top films sold. It is the source of truth for money.\n- query_behaviour(sql): read-only HogQL on PostHog for behaviour.\n\nPostHog schema (table events: event, timestamp, person_id, distinct_id, properties.*; table persons: id, properties.*):\n- page views: event = '$pageview' (properties.$pathname)\n- film pages: 'movie.viewed' (properties.movieId, movieTitle, primaryGenre, genres, priceKes)\n- film card taps: 'movie.clicked' (properties.row = which row, position)\n- trailers: 'video.started', 'video.progress' (properties.percent), 'video.completed' (properties.watchedSec)\n- sign-up wall: 'video.auth_prompted', then 'user.signed_up'\n- checkout: 'checkout.started', 'checkout.cancelled', 'payment.submitted', 'payment.failed' (properties.reason), 'payment.abandoned', 'payment.succeeded' (properties.amountKes, channel, primaryGenre, movieTitle, nudgeScenario), 'purchase.confirmed'\n- nudges: 'nudge.sent' (properties.scenario A/B/C, step), 'nudge.opened'\n- persons: properties.favoriteGenre, topGenres, filmsOwned, trailersWatched\n\nRules:\n1. Every HogQL query is a single SELECT with a timestamp filter (e.g. timestamp > now() - INTERVAL 7 DAY) and LIMIT 50 or less. Strings in single quotes. Never write to anything.\n2. \"Watched\" means trailers started or completed (the in-app player plays trailers today); say so when it matters.\n3. Answer in 2\u20135 short lines: the number(s) first, the period, then one practical insight for sales or marketing. Use KES and thousands separators.\n4. If a tool fails or returns nothing, say what you couldn't get. Don't invent numbers.",
+          "maxIterations": 6
+        }
+      }
+    },
+    {
+      "id": "1365a16f-12f0-494e-a89f-2ca5ae43446f",
+      "name": "Analyst \u00b7 model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        180,
+        240
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "={{ $env.OPENROUTER_MODEL || 'openai/gpt-4o-mini' }}",
+          "mode": "id"
+        },
+        "options": {
+          "temperature": 0.1,
+          "timeout": 30000,
+          "baseURL": "={{ $env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1' }}"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "1440565b-9de8-401a-8930-e5c65db650cc",
+      "name": "Analyst \u00b7 memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        340,
+        260
+      ],
+      "parameters": {
+        "contextWindowLength": 8
+      }
+    },
+    {
+      "id": "cb70537e-a4c7-4f03-8198-cc7e7f22cb6c",
+      "name": "query_behaviour",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        260
+      ],
+      "parameters": {
+        "toolDescription": "Run one read-only HogQL SELECT on Yakwetu's PostHog events and persons (viewing and shopping behaviour). Input: the SQL. Use single quotes for strings, always a time filter and LIMIT 50 or less.",
+        "method": "POST",
+        "url": "={{ ($env.ANALYTICS_QUERY_URL || 'http://sinema-api:3001/api/internal/stats') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":{\"kind\":\"HogQLQuery\",\"query\":\"{sql}\"}}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "sql",
+              "description": "A HogQL SELECT with single-quoted strings, a timestamp filter and LIMIT \u2264 50",
+              "type": "string"
+            }
+          ]
+        },
+        "optimizeResponse": true
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZRYWNG9VSqlxkAvj",
+          "name": "PostHog personal (read)"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "3e6c05bf-0f1c-4e6a-81a4-593932674c21",
+      "name": "sales_summary",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        260
+      ],
+      "parameters": {
+        "toolDescription": "Money figures from the storefront (Paystack-verified): revenue, payments by status, failure reasons, M-Pesa vs card, nudges sent/opened/paid and KES recovered per scenario, top films sold. Input: days, the period length (1 = last 24 h, 7 = last week).",
+        "method": "GET",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/stats?days=' + encodeURIComponent($fromAI('days','Number of days','number') || 7) }}",
+        "authentication": "none",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "x-internal-token",
+              "valueProvider": "fieldValue",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "days",
+              "description": "Period in days, 1 to 90",
+              "type": "number"
+            }
+          ]
+        },
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Staff chat": {
+      "main": [
+        [
+          {
+            "node": "Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyst \u00b7 model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyst \u00b7 memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Analyst",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query_behaviour": {
+      "ai_tool": [
+        [
+          {
+            "node": "Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sales_summary": {
+      "ai_tool": [
+        [
+          {
+            "node": "Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

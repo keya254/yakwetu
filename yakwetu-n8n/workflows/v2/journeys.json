@@ -1,0 +1,904 @@
+{
+  "name": "YKW \u00b7 Journeys \u2014 welcome & first watch (q.n8n.journeys)",
+  "nodes": [
+    {
+      "id": "note-journeys",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -40
+      ],
+      "parameters": {
+        "content": "## Journeys v2\nQueue `q.n8n.journeys`:\n- **user.signed_up / signup** \u2192 welcome + first-film pick\n- **watch_complete** \u2192 what to watch next\n\nNotify: `POST /api/internal/notify` on paystack-api.\nEnv: `YAKWETU_API_URL`, `INTERNAL_API_KEY` / `ADMIN_TOKEN`, `STOREFRONT_URL`.",
+        "height": 280,
+        "width": 360
+      }
+    },
+    {
+      "id": "rmq-journeys",
+      "name": "Business moments (RabbitMQ)",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "queue": "q.n8n.journeys",
+        "options": {
+          "acknowledge": "executionFinishesSuccessfully",
+          "jsonParseBody": true,
+          "onlyContent": true,
+          "parallelMessages": 5
+        }
+      },
+      "credentials": {
+        "rabbitmq": {
+          "id": "0XUkvX0FdyyHYkKN",
+          "name": "RabbitMQ account"
+        }
+      }
+    },
+    {
+      "id": "normalize-event",
+      "name": "Normalize event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\nlet j = raw;\nif (typeof raw.content === 'string') {\n  try { j = JSON.parse(raw.content); } catch (e) { j = raw; }\n} else if (raw.content && typeof raw.content === 'object') {\n  j = raw.content;\n}\nconst type = String(j.type || j.event_type || j.routing_key || raw.type || '').trim();\nconst userId = j.userId || j.user_id || j.properties?.userId || '';\nconst phone = j.phone || j.properties?.phone || '';\nconst email = j.email || j.properties?.email || '';\nconst name = j.name || j.properties?.name || '';\nconst movieId = j.movie_id || j.properties?.movieId || '';\nconst movieTitle = j.movie_title || j.properties?.movieTitle || '';\nconst isWelcome = type === 'user.signed_up' || type === 'signup' || type === 'user_signed_up';\nconst isWatch = type === 'watch_complete';\nreturn [{\n  json: {\n    ...j,\n    type,\n    userId,\n    user_id: userId,\n    phone,\n    email,\n    name,\n    movie_id: movieId,\n    movie_title: movieTitle,\n    session_id: j.session_id || j.properties?.sessionId || null,\n    channel_pref: j.channel_pref || j.channelPref || j.properties?.channelPref || 'both',\n    isWelcome,\n    isWatch,\n    route: isWelcome ? 'welcome' : isWatch ? 'watch' : 'skip',\n  },\n}];"
+      }
+    },
+    {
+      "id": "if-welcome",
+      "name": "Is welcome signup?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "welcome",
+              "leftValue": "={{ $json.isWelcome }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "if-watch",
+      "name": "Is watch complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        360
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "watch",
+              "leftValue": "={{ $json.isWatch }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "skip-other",
+      "name": "Other moments \u2014 skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        960,
+        480
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "wait-welcome",
+      "name": "Welcome \u00b7 Wait 1s (demo)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        40
+      ],
+      "webhookId": "ykw-journeys-welcome-wait",
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 1,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "recs-welcome",
+      "name": "Welcome \u00b7 Pick film",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        40
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/recs/' + encodeURIComponent($('Normalize event').item.json.userId || '') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "mode",
+              "value": "browse"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "user-welcome",
+      "name": "Welcome \u00b7 Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        40
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/users/' + encodeURIComponent($('Normalize event').item.json.userId || '') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "write-welcome",
+      "name": "Welcome \u00b7 Write message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        40
+      ],
+      "parameters": {
+        "jsCode": "const event = $('Normalize event').first().json;\nconst items = ($('Welcome \u00b7 Pick film').first().json?.data?.items || []).slice(0, 3);\nconst pick = items[0];\nconst person = $('Welcome \u00b7 Contacts').first().json || {};\nconst first = String(person.name || event.name || 'there').trim().split(/\\s+/)[0] || 'there';\nconst store = String($env.STOREFRONT_URL || 'http://localhost:18080').replace(/\\/$/, '');\nconst url = pick?.pageUrl || (store + '/browse');\nconst poster = pick?.poster || pick?.posterUrl || '';\nconst titles = items.map((i) => i.title).filter(Boolean);\nlet message = pick\n  ? ('Karibu ' + first + '! Start with ' + titles.join(' \u00b7 ') + ' \u2014 from KES ' + pick.priceKes + '. Trailer: ' + url)\n  : ('Karibu ' + first + '! Browse Kenyan & African films from KES 5 on Yakwetu Sinema: ' + store + '/browse');\nif (message.length > 280) message = message.slice(0, 277) + '...';\nconst phone = person.phone || event.phone || '';\nconst email = person.email || event.email || '';\nreturn [{ json: {\n  userId: event.userId,\n  phone,\n  email,\n  name: person.name || event.name || first,\n  channelPref: person.channel_pref || person.channelPref || event.channel_pref || 'both',\n  subject: pick ? ('Karibu ' + first + ' \u2014 start with ' + pick.title) : ('Karibu ' + first + ' \u2014 Yakwetu Sinema'),\n  scenario: 'journey_welcome',\n  firstName: first,\n  filmTitle: pick?.title || null,\n  pickTitle: pick?.title || null,\n  bundleTitle: titles.length > 1 ? titles.slice(1).join(' + ') : null,\n  genre: (pick?.genres && pick.genres[0]) || '',\n  priceKes: pick?.priceKes || 5,\n  url,\n  ctaUrl: url,\n  ctaLabel: 'Watch the trailer',\n  imageUrl: poster,\n  message,\n  fallback: message,\n  recommendedFilms: items.map((i) => ({\n    title: i.title,\n    genre: (i.genres && i.genres[0]) || '',\n    priceKes: i.priceKes,\n    id: i.movieId || i.id,\n  })),\n}}];"
+      }
+    },
+    {
+      "id": "if-welcome-contact",
+      "name": "Welcome \u00b7 Has contact?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "wc",
+              "leftValue": "={{ Boolean($json.ready) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "skip-welcome",
+      "name": "Welcome \u00b7 No contact \u2014 skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        140
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "wait-watch",
+      "name": "Watch \u00b7 Wait 1s (demo)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        320
+      ],
+      "webhookId": "ykw-journeys-watch-wait",
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 1,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "user-watch",
+      "name": "Watch \u00b7 Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        320
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/users/' + encodeURIComponent($('Normalize event').item.json.userId || '') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "recs-watch",
+      "name": "Watch \u00b7 Pick next",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        320
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/recs/' + encodeURIComponent($('Normalize event').item.json.userId || '') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "mode",
+              "value": "next"
+            },
+            {
+              "name": "anchor",
+              "value": "={{ $('Normalize event').item.json.movie_id || '' }}"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "write-watch",
+      "name": "Watch \u00b7 Write message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const event = $('Normalize event').first().json;\nconst items = ($('Watch \u00b7 Pick next').first().json?.data?.items || []).slice(0, 3);\nconst pick = items[0];\nconst person = $('Watch \u00b7 Contacts').first().json || {};\nconst first = String(person.name || event.name || 'there').trim().split(/\\s+/)[0] || 'there';\nconst watched = event.movie_title || event.movie_id || 'that film';\nconst store = String($env.STOREFRONT_URL || 'http://localhost:18080').replace(/\\/$/, '');\nconst url = pick?.pageUrl || (store + '/browse');\nconst poster = pick?.poster || pick?.posterUrl || '';\nconst titles = items.map((i) => i.title).filter(Boolean);\nlet message = pick\n  ? ('Nice one, ' + first + '! After ' + watched + ', try ' + titles.join(' \u00b7 ') + ' \u2014 from KES ' + pick.priceKes + ': ' + url)\n  : ('Nice one, ' + first + '! More films waiting on Yakwetu from KES 5: ' + store + '/browse');\nif (message.length > 280) message = message.slice(0, 277) + '...';\nconst phone = person.phone || event.phone || '';\nconst email = person.email || event.email || '';\nreturn [{ json: {\n  userId: event.userId,\n  phone,\n  email,\n  name: person.name || event.name || first,\n  channelPref: person.channel_pref || person.channelPref || event.channel_pref || 'both',\n  subject: pick ? ('After ' + watched + ' \u2014 try ' + pick.title) : ('What to watch next, ' + first),\n  scenario: 'C_after_watch',\n  firstName: first,\n  filmTitle: pick?.title || null,\n  watchedTitle: watched,\n  pickTitle: pick?.title || null,\n  bundleTitle: titles.length > 1 ? titles.slice(1).join(' + ') : null,\n  genre: (pick?.genres && pick.genres[0]) || '',\n  priceKes: pick?.priceKes || 5,\n  url,\n  ctaUrl: url,\n  ctaLabel: 'Watch next',\n  imageUrl: poster,\n  message,\n  fallback: message,\n  recommendedFilms: items.map((i) => ({\n    title: i.title,\n    genre: (i.genres && i.genres[0]) || '',\n    priceKes: i.priceKes,\n    id: i.movieId || i.id,\n  })),\n}}];"
+      }
+    },
+    {
+      "id": "if-watch-contact",
+      "name": "Watch \u00b7 Has contact?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "wch",
+              "leftValue": "={{ Boolean($json.ready) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "skip-watch",
+      "name": "Watch \u00b7 No contact \u2014 skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "restore-welcome",
+      "name": "Welcome \u00b7 Restore context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        40
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { ...$('Normalize event').first().json } }];"
+      }
+    },
+    {
+      "id": "restore-watch",
+      "name": "Watch \u00b7 Restore context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        320
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { ...$('Normalize event').first().json } }];"
+      }
+    },
+    {
+      "id": "b4c38f76-faa9-4896-a37d-353b15b34b91",
+      "name": "Welcome \u00b7 OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'http://localhost:18080' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu Sinema"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.7, max_tokens: 120, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'You write one short Yakwetu Sinema message (Kenyan pay-per-film). Return JSON {\\\"message\\\": \\\"...\\\"}. Max 110 chars. Warm Kenyan English. Use only given facts. No links, emojis, or hashtags. End so a link reads naturally after it.' },{ role: 'user', content: 'First name: ' + String($json.firstName||$json.name||'there') + '\\n' + 'Pick film: ' + String($json.filmTitle||$json.pickTitle||'') + '\\n' + 'Why: welcome / first film\\n' + 'Price hint: KES ' + String($json.priceKes||5) }] }) }}",
+        "options": {
+          "timeout": 25000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "56a2013a-654c-4961-b20c-a10200c55b05",
+      "name": "Welcome \u00b7 Parse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        40
+      ],
+      "parameters": {
+        "jsCode": "let message = '';\nlet error = null;\ntry {\n  const raw = $input.first().json || {};\n  if (raw.error || raw.message === 'Unauthorized' || raw.code === 401) error = String(raw.error || raw.message || 'openrouter_error');\n  const content = (raw.choices && raw.choices[0] && raw.choices[0].message && raw.choices[0].message.content) || '';\n  if (typeof content === 'string' && content.trim().startsWith('{')) {\n    const parsed = JSON.parse(content);\n    message = String(parsed.message || parsed.text || '').trim();\n  } else if (typeof content === 'string' && !error) message = content.trim();\n} catch (e) { error = String(e.message || e); }\nreturn [{ json: { output: { message }, text: message, error } }];"
+      }
+    },
+    {
+      "id": "bbfd90db-b7f0-4103-9084-a1adb240fbb2",
+      "name": "Welcome \u00b7 Guard copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        40
+      ],
+      "parameters": {
+        "jsCode": "const facts = $(\"Welcome \u00b7 Write message\").first().json || {};\nconst ai = $input.first().json || {};\nconst text = String((ai.output && ai.output.message) || ai.text || '').trim();\nlet fallbackReason = null;\nif (!text) fallbackReason = ai.error ? ('AI error: ' + ai.error) : 'no AI answer';\nelse if (text.length > 140) fallbackReason = 'too long';\nelse if (/https?:|www\\./i.test(text)) fallbackReason = 'contains a link';\nconst body = fallbackReason ? (facts.fallback || facts.message || '') : text;\nconst url = facts.url || facts.ctaUrl || '';\nconst message = url ? `${body} ${url}`.trim() : body;\nreturn [{ json: { ...facts, message, aiUsed: !fallbackReason, fallbackReason } }];"
+      }
+    },
+    {
+      "id": "1e380fe2-2d73-4471-8fc8-217af7ffcb91",
+      "name": "Watch \u00b7 OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'http://localhost:18080' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu Sinema"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.7, max_tokens: 120, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'You write one short Yakwetu Sinema message (Kenyan pay-per-film). Return JSON {\\\"message\\\": \\\"...\\\"}. Max 110 chars. Warm Kenyan English. Use only given facts. No links, emojis, or hashtags. End so a link reads naturally after it.' },{ role: 'user', content: 'First name: ' + String($json.firstName||$json.name||'there') + '\\n' + 'Just watched: ' + String($json.watchedTitle||$json.filmTitle||'') + '\\n' + 'Next pick: ' + String($json.pickTitle||$json.nextTitle||'') + '\\n' + 'Why: after-watch rec' }] }) }}",
+        "options": {
+          "timeout": 25000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "12846835-edc1-48c0-af6d-000ab0549a53",
+      "name": "Watch \u00b7 Parse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2120,
+        320
+      ],
+      "parameters": {
+        "jsCode": "let message = '';\nlet error = null;\ntry {\n  const raw = $input.first().json || {};\n  if (raw.error || raw.message === 'Unauthorized' || raw.code === 401) error = String(raw.error || raw.message || 'openrouter_error');\n  const content = (raw.choices && raw.choices[0] && raw.choices[0].message && raw.choices[0].message.content) || '';\n  if (typeof content === 'string' && content.trim().startsWith('{')) {\n    const parsed = JSON.parse(content);\n    message = String(parsed.message || parsed.text || '').trim();\n  } else if (typeof content === 'string' && !error) message = content.trim();\n} catch (e) { error = String(e.message || e); }\nreturn [{ json: { output: { message }, text: message, error } }];"
+      }
+    },
+    {
+      "id": "b300a409-3d37-4593-adcb-13e8f96e2b3f",
+      "name": "Watch \u00b7 Guard copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const facts = $(\"Watch \u00b7 Write message\").first().json || {};\nconst ai = $input.first().json || {};\nconst text = String((ai.output && ai.output.message) || ai.text || '').trim();\nlet fallbackReason = null;\nif (!text) fallbackReason = ai.error ? ('AI error: ' + ai.error) : 'no AI answer';\nelse if (text.length > 140) fallbackReason = 'too long';\nelse if (/https?:|www\\./i.test(text)) fallbackReason = 'contains a link';\nconst body = fallbackReason ? (facts.fallback || facts.message || '') : text;\nconst url = facts.url || facts.ctaUrl || '';\nconst message = url ? `${body} ${url}`.trim() : body;\nreturn [{ json: { ...facts, message, aiUsed: !fallbackReason, fallbackReason } }];"
+      }
+    },
+    {
+      "id": "2ac033fe-b4dc-4956-8172-015495ed8ace",
+      "name": "API already sent (skip n8n notify)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        80
+      ],
+      "parameters": {},
+      "notesInFlow": true,
+      "notes": "Customer SMS/email is sent by paystack-api when the event is ingested. n8n must not send again (prevents 4x duplicates)."
+    }
+  ],
+  "connections": {
+    "Business moments (RabbitMQ)": {
+      "main": [
+        [
+          {
+            "node": "Normalize event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize event": {
+      "main": [
+        [
+          {
+            "node": "Is welcome signup?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is welcome signup?": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Wait 1s (demo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is watch complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is watch complete?": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Wait 1s (demo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Other moments \u2014 skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Wait 1s (demo)": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Restore context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Pick film": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Contacts": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Write message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Write message": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Has contact?": {
+      "main": [
+        [
+          {
+            "node": "API already sent (skip n8n notify)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Welcome \u00b7 No contact \u2014 skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Wait 1s (demo)": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Restore context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Contacts": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Pick next",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Pick next": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Write message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Write message": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Has contact?": {
+      "main": [
+        [
+          {
+            "node": "API already sent (skip n8n notify)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Watch \u00b7 No contact \u2014 skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Restore context": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Pick film",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Restore context": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Parse AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Parse AI": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Guard copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome \u00b7 Guard copy": {
+      "main": [
+        [
+          {
+            "node": "Welcome \u00b7 Has contact?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Parse AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Parse AI": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Guard copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch \u00b7 Guard copy": {
+      "main": [
+        [
+          {
+            "node": "Watch \u00b7 Has contact?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi"
+  }
+}

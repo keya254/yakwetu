@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yakwetu — Demo Lab</title>
+<style>
+  :root{--bg:oklch(0.165 0.006 60);--panel:oklch(0.205 0.008 60);--gold:oklch(0.78 0.15 68);--text:oklch(0.95 0.012 80);--muted:oklch(0.7 0.015 75);--green:#3ddc84;--red:oklch(0.68 0.19 25);--line:oklch(0.95 0.012 80 / 12%)}
+  *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px 100px}
+  h1{color:var(--gold);letter-spacing:-0.02em;font-size:22px;margin-bottom:8px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:20px;max-width:720px;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;max-width:1100px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .card h2{font-size:15px;margin-bottom:6px}
+  .card p{color:var(--muted);font-size:12px;margin-bottom:14px;line-height:1.4;min-height:36px}
+  .card button{background:var(--gold);color:#1a1208;border:none;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;width:100%}
+  .card button.danger{background:#3a2a2a;color:#ffb4b4}
+  .card.featured{border-color:var(--gold)}
+  label{font-size:12px;color:var(--muted);display:block;margin:12px 0 4px}
+  input{width:100%;max-width:420px;background:#1c1c26;border:1px solid #2c2c3a;color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px}
+  #log{margin-top:28px;max-width:1100px;background:#101018;border:1px solid var(--line);border-radius:12px;padding:14px;font-family:ui-monospace,monospace;font-size:12px;max-height:280px;overflow:auto;white-space:pre-wrap}
+  a{color:var(--gold)}
+  .cfg{position:fixed;bottom:0;left:0;right:0;background:#101018;border-top:1px solid var(--line);padding:10px 20px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .row{display:flex;flex-wrap:wrap;gap:16px;max-width:1100px;margin-bottom:8px}
+  .row > div{flex:1;min-width:200px}
+</style>
+</head>
+<body>
+<h1>Yakwetu Sinema · demo lab</h1>
+<p class="sub">
+  Fire events into the API outbox → RabbitMQ → n8n v2. Each checkout / pay fail / success
+  creates a <b>real</b> <code>orders</code> row and puts that <code>orderId</code> on the message
+  so n8n can load it. Analytics land in Postgres (/admin).
+  <b>Email is preferred</b> when set (no SMS if email exists). Leave email blank for SMS-only.
+  After Demo Lab clicks, expect nudges almost instantly (re-import v2 DEMO workflows).
+</p>
+
+<div class="row">
+  <div>
+    <label>Display name</label>
+    <input id="name" value="Wanjiku Mwangi">
+  </div>
+  <div>
+    <label>Phone (SMS / Kenya)</label>
+    <input id="phone" placeholder="+2547XXXXXXXX" value="">
+  </div>
+  <div>
+    <label>Email (Resend — use a real inbox you can open)</label>
+    <input id="email" placeholder="you@yourdomain.com" value="">
+  </div>
+</div>
+
+<div class="grid" style="margin-top:24px">
+  <div class="card featured">
+    <h2>A — Simulate abandon → nudge</h2>
+    <p>Checkout without pay, force abandon scanner (outbox → payment.abandoned).</p>
+    <button onclick="runSimulateAbandon()">Simulate abandon</button>
+  </div>
+  <div class="card">
+    <h2>A — Browse trail</h2>
+    <p>3 browse events for recommendations / Postgres analytics.</p>
+    <button onclick="runBrowse()">Send browses</button>
+  </div>
+  <div class="card">
+    <h2>B — Payment failed</h2>
+    <p>payment_failed + payment.failed routing for rescue SMS/email.</p>
+    <button class="danger" onclick="runPayFail()">Simulate pay fail</button>
+  </div>
+  <div class="card">
+    <h2>B — Wrong PIN fail</h2>
+    <p>Same rescue path with wrong-PIN copy.</p>
+    <button class="danger" onclick="runPayFail('Wrong M-Pesa PIN entered')">Simulate wrong PIN</button>
+  </div>
+  <div class="card">
+    <h2>B — Payment success</h2>
+    <p>purchase.confirmed for upsell journey.</p>
+    <button onclick="runPaySuccess()">Simulate success</button>
+  </div>
+  <div class="card">
+    <h2>C — Watch complete</h2>
+    <p>watch_complete after a silent payment_success.</p>
+    <button onclick="runWatch()">Finish watching</button>
+  </div>
+  <div class="card">
+    <h2>Auth — Signup event</h2>
+    <p>user.signed_up / signup for journeys (welcome SMS or email).</p>
+    <button onclick="runSignup()">Fire signup</button>
+  </div>
+  <div class="card">
+    <h2>Dual channel ping</h2>
+    <p>Admin-style follow-up preview via /api/admin (needs admin token in localStorage from /admin).</p>
+    <button onclick="runDualPing()">Ping SMS + email</button>
+  </div>
+</div>
+
+<div id="log">Ready. Events go to /api/events (outbox).</div>
+<p style="margin-top:16px;font-size:13px;color:var(--muted)">
+  <a href="/">← Storefront</a> ·
+  <a href="/admin">Admin CRM</a> ·
+  <a href="/login">Login</a>
+</p>
+
+<div class="cfg">
+  <span>Webhook override (optional):</span>
+  <input id="whBase" placeholder="blank = /api/events">
+  <button onclick="saveCfg()">Save</button>
+  <span id="cfgStatus"></span>
+</div>
+
+<script src="shared.js"></script>
+<script>
+const logEl = document.getElementById('log');
+function log(msg){ logEl.textContent += '\n' + msg; logEl.scrollTop = logEl.scrollHeight; }
+
+function identity(){
+  // Empty fields intentionally clear — do not keep stale localStorage email
+  // (otherwise notify keeps preferring email and SMS never fires).
+  USER.phone = document.getElementById('phone').value.trim();
+  USER.email = document.getElementById('email').value.trim();
+  USER.name = document.getElementById('name').value.trim() || USER.name || 'Wanjiku';
+  USER.channel_pref = USER.email ? 'email' : (USER.phone ? 'sms' : 'email');
+  USER.user_id = USER.phone
+    ? 'u_' + USER.phone.replace(/\D/g, '').slice(-9)
+    : USER.email
+      ? 'u_e_' + btoa(USER.email).replace(/=/g, '').slice(0, 10)
+      : USER.user_id;
+  localStorage.setItem('ykw_user', JSON.stringify(USER));
+  localStorage.setItem('ykw_authed', '1');
+  return USER;
+}
+
+const M = {
+  nights: {id:'nairobi-half-life', title:'Nairobi Half Life', genre:'Crime Drama', price:5},
+  rafiki: {id:'rafiki', title:'Rafiki', genre:'Romance Drama', price:5},
+  sticks: {id:'40-sticks', title:'40 Sticks', genre:'Crime Thriller', price:5},
+  pumzi: {id:'pumzi', title:'Pumzi', genre:'Sci-Fi', price:5},
+};
+
+async function fire(type, movie, extra={}){
+  identity();
+  const r = await track(type, movie, extra);
+  if (r?.status === 502 || r?.status === 504 || /502|504|Bad Gateway|Time-out/i.test(String(r?.error||''))) {
+    log(`${type} → API down (${r.status || 'gateway'}). Redeploy sinema-api in Docker and wait for healthy.`);
+    toast('API is down (502). Redeploy paystack-api, then retry.', true);
+    return r;
+  }
+  const oid = r?.order_id || r?.results?.[0]?.order_id;
+  log(`${type} → ${JSON.stringify(r)}${oid ? `  [order ${oid}]` : ''}`);
+  return r;
+}
+
+async function triggerAbandonScan(sessionId){
+  const url = location.origin.replace(/\/$/, '') + '/api/demo/abandon-scan';
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: true, source: 'demo-lab', session_id: sessionId })
+  });
+  const body = await r.json().catch(() => ({}));
+  log(`abandon-scan → ${JSON.stringify(body)}`);
+  if (!r.ok) throw new Error(body.error || `scan HTTP ${r.status}`);
+  return body;
+}
+
+async function runPayFail(reason='Insufficient balance'){
+  log('--- payment_failed: ' + reason + ' ---');
+  newSession();
+  await fire('checkout_start', M.nights);
+  const fail = await fire('payment_failed', M.nights, { failure_reason: reason });
+  toast(fail?.order_id ? `Rescue queued · order ${fail.order_id}` : 'Expect rescue via SMS and/or email', !fail?.order_id);
+}
+
+async function runPaySuccess(){
+  log('--- payment_success ---');
+  newSession();
+  await fire('checkout_start', M.sticks);
+  const ok = await fire('payment_success', M.sticks);
+  toast(ok?.order_id ? `purchase.confirmed · order ${ok.order_id}` : 'purchase.confirmed queued');
+}
+
+async function runSimulateAbandon(){
+  log('--- simulate abandon ---');
+  const sess = newSession();
+  await fire('browse', M.nights);
+  const co = await fire('checkout_start', M.nights);
+  await triggerAbandonScan(sess);
+  toast(co?.order_id ? `Abandon published · order ${co.order_id}` : 'Abandon published — check RabbitMQ / n8n / SMS or email');
+}
+
+async function runBrowse(){
+  log('--- browse trail ---');
+  await fire('browse', M.pumzi);
+  await fire('browse', M.rafiki);
+  await fire('browse', M.nights);
+  toast('Browse events sent');
+}
+
+async function runWatch(){
+  log('--- watch_complete ---');
+  newSession();
+  const ok = await fire('payment_success', M.nights, { skip_sms: true });
+  await fire('watch_complete', M.nights);
+  toast(ok?.order_id ? `Watch complete · order ${ok.order_id}` : 'Watch complete sent');
+}
+
+async function runSignup(){
+  log('--- signup ---');
+  newSession();
+  await fire('signup', null);
+  toast('user.signed_up / signup queued');
+}
+
+async function runDualPing(){
+  identity();
+  const token = localStorage.getItem('ykw_admin_token');
+  if (!token) {
+    toast('Unlock /admin first so ykw_admin_token is set', true);
+    log('Need admin token');
+    return;
+  }
+  const r = await fetch('/api/admin/follow-up', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+    body: JSON.stringify({
+      user_id: USER.user_id,
+      phone: USER.phone,
+      email: USER.email,
+      name: USER.name,
+      message: `Karibu from Demo Lab — your Yakwetu notify path is working. Browse films: ${location.origin}/browse`,
+      subject: 'Yakwetu Demo Lab — channel check',
+      channels: ['email', 'sms'].filter((c) => (c === 'sms' ? USER.phone : USER.email)),
+      scenario: 'demo_lab_ping',
+      ctaUrl: location.origin.replace(/\/$/, '') + '/browse',
+    }),
+  });
+  const body = await r.json().catch(() => ({}));
+  log(`dual ping → ${JSON.stringify(body)}`);
+  toast(r.ok ? 'Follow-up sent' : (body.error || 'failed'), !r.ok);
+}
+
+(function(){
+  const el = document.getElementById('whBase');
+  el.value = localStorage.getItem('ykw_base') || '';
+  document.getElementById('cfgStatus').textContent = '→ ' + webhookUrl();
+})();
+</script>
+</body>
+</html>

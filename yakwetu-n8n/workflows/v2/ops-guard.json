@@ -1,0 +1,193 @@
+{
+  "name": "YKW \u00b7 Ops guard \u2014 RabbitMQ health (every 3 h)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "952b2e62-78a0-4d65-852a-f3e35b89238c",
+      "name": "Note 53c33b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -380
+      ],
+      "parameters": {
+        "content": "## Is the event pipeline healthy?\nEvery 3 hours, reads every queue's depth from the RabbitMQ management API (read-only `monitor` user) and checks:\n- any **parking queue (DLQ)** holding messages;\n- a queue that must always have a consumer and has none;\n- a backlog building up.\n\nIt emails only when the picture **changes** (new problem, or all clear), so a known issue doesn't mail you every run. Replay parked messages from the RabbitMQ UI: Queues \u2192 *.dlq \u2192 Move messages.",
+        "width": 460,
+        "height": 320,
+        "color": 3
+      }
+    },
+    {
+      "id": "4e3fcc0f-c7eb-4871-931b-20f0d140bf6d",
+      "name": "Every 3 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "71059e9f-58bf-4711-8e53-319868f2242e",
+      "name": "Queue depths (RabbitMQ API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "url": "={{ ($env.RABBITMQ_MGMT_URL || 'http://sinema-broker:15672') + '/api/queues/' + encodeURIComponent($env.RABBITMQ_VHOST || 'sinema') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "columns",
+              "value": "name,messages,messages_ready,messages_unacknowledged,consumers"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Credential: Basic Auth 'RabbitMQ monitor': user monitor, password <RABBITMQ_MONITOR_PASSWORD>",
+      "notesInFlow": true
+    },
+    {
+      "id": "8e2e959a-439f-441c-9160-0d6296ca4e36",
+      "name": "Find problems",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Queues must have a consumer; parking queues must be empty; nothing should pile up.\nconst queues = $input.all().map((item) => item.json);\nconst mustConsume = ['q.recs.signals', 'q.analytics'];\nconst problems = [];\nfor (const q of queues) {\n  if (q.name.endsWith('.dlq') && q.messages > 0) problems.push({ key: 'dlq:' + q.name, text: `${q.messages} message(s) parked in ${q.name}` });\n  if (mustConsume.includes(q.name) && q.consumers === 0) problems.push({ key: 'noconsumer:' + q.name, text: `${q.name} has no consumer: events are queuing, not being processed` });\n  if (!q.name.endsWith('.dlq') && q.messages_ready > 1000) problems.push({ key: 'backlog:' + q.name, text: `${q.name} backlog: ${q.messages_ready} waiting` });\n}\n// Mail only on change. Static data persists between production runs of this workflow.\nconst state = $getWorkflowStaticData('global');\nconst fingerprint = problems.map((p) => p.key).sort().join('|');\nconst changed = fingerprint !== (state.fingerprint ?? '');\nstate.fingerprint = fingerprint;\nconst summary = problems.length ? problems.map((p) => '\u2022 ' + p.text).join('\\n') : 'All queues healthy: every consumer connected, parking queues empty.';\nreturn [{ json: { notify: changed, healthy: problems.length === 0, problems, summary, queues: queues.map((q) => `${q.name}: ${q.messages} (${q.consumers} consumer)`) } }];"
+      }
+    },
+    {
+      "id": "4cc06f99-5363-4076-8792-f2f9ec21e316",
+      "name": "Anything new?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d615deba-66c2-4606-ab63-d86a2087fa7a",
+              "leftValue": "={{ $json.notify }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b045ff14-09fb-44bb-86c5-7e97b96f7a3e",
+      "name": "Email the team",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        -100
+      ],
+      "parameters": {
+        "sendTo": "ops@example.com",
+        "subject": "={{ $json.healthy ? 'Yakwetu pipeline: all clear' : 'Yakwetu pipeline: needs attention' }}",
+        "emailType": "text",
+        "message": "={{ $json.summary + '\\n\\nQueues:\\n' + $json.queues.join('\\n') + '\\n\\nRabbitMQ: ' + ($env.RABBITMQ_MGMT_URL || 'http://sinema-broker:15672') }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nf01MA1vhcwQsDZV",
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "8d79923b-6931-4c0e-85f7-60252902699d"
+    }
+  ],
+  "connections": {
+    "Every 3 hours": {
+      "main": [
+        [
+          {
+            "node": "Queue depths (RabbitMQ API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue depths (RabbitMQ API)": {
+      "main": [
+        [
+          {
+            "node": "Find problems",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find problems": {
+      "main": [
+        [
+          {
+            "node": "Anything new?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything new?": {
+      "main": [
+        [
+          {
+            "node": "Email the team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

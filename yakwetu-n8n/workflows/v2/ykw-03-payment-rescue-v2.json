@@ -1,0 +1,887 @@
+{
+  "name": "YKW 03 \u2014 Payment Failure Rescue \u00b7 v2 (RabbitMQ)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "d5b31dfe-b91e-422e-91dc-b253c15d1aee",
+      "name": "Note 6f7fbd",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -500
+      ],
+      "parameters": {
+        "content": "## YKW 03 \u2014 payment rescue\n\nCustomer story:\n1. Payment failed \u2192 verify not already paid\n2. Load order/viewer \u2192 skip if no contact / already owns\n3. DEMO: skip quiet-hours hold\n4. Create resume offer link\n5. **OpenRouter** personalises rescue copy (template fallback)\n6. **Notify via API**\n7. Wait ~1s (demo) \u2192 if still unpaid \u2192 PONA10 incentive \u2192 Notify\n\nSend only via `/api/internal/notify` (email preferred, SMS fallback).\nNeeds: `OPENROUTER_*`, `YAKWETU_API_URL`, `INTERNAL_API_KEY`\n",
+        "width": 560,
+        "height": 500,
+        "color": 4
+      }
+    },
+    {
+      "id": "c758ac3c-2983-4b47-8617-724b7cc3c74c",
+      "name": "Payment failed (RabbitMQ)",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "queue": "q.n8n.payment-failed",
+        "options": {
+          "acknowledge": "executionFinishesSuccessfully",
+          "jsonParseBody": true,
+          "onlyContent": true,
+          "parallelMessages": 5
+        }
+      },
+      "credentials": {
+        "rabbitmq": {
+          "id": "0XUkvX0FdyyHYkKN",
+          "name": "RabbitMQ account"
+        }
+      }
+    },
+    {
+      "id": "962d910d-fce0-4459-b45b-9d61fb7c9376",
+      "name": "Paid after all? (Paystack verify)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'https://api.paystack.co/transaction/verify/' + encodeURIComponent($json.properties.reference) }}",
+        "authentication": "none",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.PAYSTACK_SECRET_KEY }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c8a07e57-d6be-4e80-90fb-00961bf3c8f9",
+      "name": "Settled after all?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e54c1f58-ab44-43cd-9a34-cef102c91cb0",
+              "leftValue": "={{ $json.data?.status === 'success' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4a0f4712-32c1-4536-ae13-077a3f4bb60f",
+      "name": "Paid: no message",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ba15cf8c-8e2d-41bb-854c-d692570bde92",
+      "name": "Order & viewer (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        60
+      ],
+      "parameters": {
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/orders/' + encodeURIComponent($('Payment failed (RabbitMQ)').item.json.properties?.orderId || $('Payment failed (RabbitMQ)').item.json.orderId || 'latest') + '?userId=' + encodeURIComponent($('Payment failed (RabbitMQ)').item.json.userId || $('Payment failed (RabbitMQ)').item.json.user_id || '') + '&email=' + encodeURIComponent($('Payment failed (RabbitMQ)').item.json.properties?.email || $('Payment failed (RabbitMQ)').item.json.email || '') + '&phone=' + encodeURIComponent($('Payment failed (RabbitMQ)').item.json.properties?.phone || $('Payment failed (RabbitMQ)').item.json.phone || '') + '&movieId=' + encodeURIComponent($('Payment failed (RabbitMQ)').item.json.properties?.movieId || '') + '&movieTitle=' + encodeURIComponent($('Payment failed (RabbitMQ)').item.json.properties?.movieTitle || '') + '&name=' + encodeURIComponent($('Payment failed (RabbitMQ)').item.json.properties?.name || $('Payment failed (RabbitMQ)').item.json.name || '') }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fdee593e-d736-4dd2-b2c3-12c3773033ad",
+      "name": "Worth a message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "86fa8142-837a-4fff-9889-0940412d4c26",
+              "leftValue": "={{ !$json.order.paid && !$json.ownsAll && Boolean($json.user?.phone || $json.user?.email) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d74eab47-43ce-41e9-a2e5-e0721f4dabea",
+      "name": "Nothing to send",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        220
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "76fb9531-88e3-4ff6-aab4-b14e124c7109",
+      "name": "Send window (07:00\u201321:00)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "const DEMO = true; // set false for live quiet hours\nconst OPEN = 7;\nconst CLOSE = 21;\nconst now = new Date();\nif (DEMO) {\n  return [{ json: { ...$input.first().json, sendWindow: 'DEMO (no hold)', holdUntilWindow: false, waitMinutes: 0, sendAt: now.toISOString(), demo: true } }];\n}\nconst parts = Object.fromEntries(new Intl.DateTimeFormat(\"en-GB\", { timeZone: \"Africa/Nairobi\", hour: \"numeric\", minute: \"numeric\", hourCycle: \"h23\" })\n    .formatToParts(now)\n    .map((part) => [part.type, part.value]));\nconst hour = Number(parts.hour) + Number(parts.minute) / 60;\nlet waitMinutes = 0;\nif (hour < OPEN)\n    waitMinutes = Math.ceil((OPEN - hour) * 60);\nelse if (hour >= CLOSE)\n    waitMinutes = Math.ceil((24 - hour + OPEN) * 60);\nreturn [\n    {\n        json: {\n            ...$input.first().json,\n            sendWindow: `${OPEN}:00\u2013${CLOSE}:00 Nairobi`,\n            holdUntilWindow: waitMinutes > 0,\n            waitMinutes,\n            sendAt: new Date(now.getTime() + waitMinutes * 60_000).toISOString(),\n            demo: false,\n        },\n    },\n];"
+      }
+    },
+    {
+      "id": "49ec16a0-8900-496c-a134-8ea1b7e26349",
+      "name": "Outside the window?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b6ce97a-4840-4b45-8c5a-7150a0014705",
+              "leftValue": "={{ $json.holdUntilWindow }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1c4a4ba1-2c68-47da-9851-2938bf26ad04",
+      "name": "Hold until the window opens",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        -160
+      ],
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $json.sendAt }}"
+      },
+      "webhookId": "0897fe70-9938-42d9-ad0c-e36786a80124"
+    },
+    {
+      "id": "6fe739cd-f4f7-442a-8170-4a4dfa7ccc40",
+      "name": "Resume link (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/nudges' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $('Order & viewer (storefront)').item.json.user.id, scenario: 'B', step: 'first', movieIds: $('Order & viewer (storefront)').item.json.order.movieIds, orderId: $('Order & viewer (storefront)').item.json.order.id, discountPct: 0, ttlMinutes: 1440 }) }}",
+        "options": {}
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "425edf69-b996-4c64-86a5-cf4826476dc4",
+      "name": "Link created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "link-ok-Link created?",
+              "leftValue": "={{ $json.nudgeId || ($json.body && $json.body.nudgeId) || ($json.data && $json.data.nudgeId) || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1988a6f5-902a-4ea7-b0d8-f2f7be8783d7",
+      "name": "Capped or not needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        140
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ab513e8f-2f31-47a5-87a3-73f3a8d1ac4f",
+      "name": "Rescue facts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const failed = $(\"Payment failed (RabbitMQ)\").first().json;\nconst info = $(\"Order & viewer (storefront)\").first().json;\nconst link = $(\"Resume link (storefront)\").first().json;\nconst rabbit = failed;\nconst rabbitPhone = rabbit.properties?.phone || rabbit.phone || '';\nconst rabbitEmail = rabbit.properties?.email || rabbit.email || '';\nconst reason = failed.properties.reason ?? \"declined\";\nconst strategies = {\n    insufficient_funds: \"Top up M-Pesa and you\u2019re done \u2014 we held the film for you.\",\n    wrong_pin: \"The PIN didn\u2019t match. Try again; it only takes a few seconds.\",\n    timeout_or_cancel: \"The M-Pesa prompt timed out. Try again when your phone is ready.\",\n    limit_exceeded: \"That went over your M-Pesa limit \u2014 pay by card or Till instead.\",\n    declined: \"The payment was declined. Try again or use another way to pay.\",\n};\nconst first = (info.user && info.user.firstName) || 'there';\nconst films = Array.isArray(link.films) ? link.films : [];\nconst title = films.map((film) => film.title).join(\" + \") || (info.order && info.order.movieTitle) || 'your film';\nconst poster = (films[0] && (films[0].poster || films[0].posterUrl || films[0].image)) || '';\nconst fallbacks = {\n    insufficient_funds: `Pole ${first} \u2014 M-Pesa balance was short for ${title} (KES ${link.totalKes}). Top up & tap to finish (we saved it):`,\n    wrong_pin: `Pole ${first} \u2014 M-Pesa PIN didn\u2019t go through for ${title}. Tap to try again:`,\n    timeout_or_cancel: `Pole ${first} \u2014 M-Pesa prompt for ${title} timed out. Tap when ready:`,\n    limit_exceeded: `Pole ${first} \u2014 ${title} went over your M-Pesa limit. Tap to pay by card/Till:`,\n};\nreturn [{\n  json: {\n    userId: info.user.id,\n    orderId: info.order.id,\n    phone: (info.user && info.user.phone) || rabbitPhone,\n    email: (info.user && info.user.email) || rabbitEmail || '',\n    channelPref: info.user.channelPref || info.user.channel_pref || 'both',\n    name: (info.user && info.user.name) || first,\n    subject: `Pole ${first} \u2014 let\u2019s finish ${title}`,\n    scenario: 'B_rescue',\n    firstName: first,\n    title,\n    filmTitle: title,\n    reason,\n    strategy: strategies[reason] ?? strategies.declined,\n    reasonHint: strategies[reason] ?? strategies.declined,\n    totalKes: link.totalKes,\n    priceKes: link.totalKes,\n    url: link.url,\n    ctaUrl: link.url,\n    ctaLabel: 'Complete payment',\n    imageUrl: poster,\n    films,\n    nudgeId: link.nudgeId,\n    movieIds: films.map((film) => film.id),\n    discountPct: link.discountPct,\n    alternative: reason === \"limit_exceeded\" ? \"\" : \" Or pay by card.\",\n    fallback: fallbacks[reason] ?? `Pole ${first} \u2014 payment for ${title} didn\u2019t go through. Tap to try again:`,\n  },\n}];"
+      }
+    },
+    {
+      "id": "5efd71b6-e0e4-4412-b029-cab6c3ee51a1",
+      "name": "Guard the copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const facts = $(\"Rescue facts\").first().json;\nconst ai = $input.first().json ?? {};\nconst text = String(ai.output?.message ?? ai.text ?? \"\").trim();\nlet fallbackReason = null;\nif (!text)\n    fallbackReason = ai.error ? \"AI error\" : \"no AI answer\";\nelse if (text.length > 120)\n    fallbackReason = \"too long\";\nelse if (/https?:|www\\.|\\.com|\\.app/i.test(text))\n    fallbackReason = \"contains a link\";\nelse {\n    const prices = [...text.matchAll(/KES\\s?([\\d,]+)/gi)].map((match) => Number(match[1].replace(/,/g, \"\")));\n    if (prices.some((price) => price !== facts.totalKes))\n        fallbackReason = \"wrong price\";\n}\nconst body = fallbackReason ? facts.fallback : text;\nreturn [{ json: { ...facts, message: `${body} ${facts.url}${facts.alternative}`.trim(), aiUsed: !fallbackReason, fallbackReason } }];"
+      }
+    },
+    {
+      "id": "af63a000-fbcf-49c1-bd5c-4730c5949486",
+      "name": "Wait 1 second (demo; 2 h live)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3600,
+        -100
+      ],
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds",
+        "resume": "timeInterval"
+      },
+      "webhookId": "7fccf1a4-b604-4d97-aab0-c5a22f11fc3a"
+    },
+    {
+      "id": "ce8ff01a-211e-49e1-a01f-63f3d5bb25fe",
+      "name": "Paid yet? (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        -100
+      ],
+      "parameters": {
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/orders/' + encodeURIComponent($('Rescue facts').item.json.orderId || 'latest') + '?userId=' + encodeURIComponent($('Rescue facts').item.json.userId || '') + '&email=' + encodeURIComponent($('Rescue facts').item.json.email || '') + '&phone=' + encodeURIComponent($('Rescue facts').item.json.phone || '') }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c55f7657-289f-4175-86c4-71103656ad08",
+      "name": "Still unpaid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4080,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8cf5557f-7377-4aca-97de-6c4e7de26177",
+              "leftValue": "={{ !$json.order.paid && !$json.ownsAll }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0f6b7c64-832f-49a4-aabf-76b726fb7a80",
+      "name": "Recovered: done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        60
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "83c3da26-a21d-4f2c-895a-bdbc0e778e7b",
+      "name": "PONA10 link (storefront)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4320,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/nudges' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $('Rescue facts').item.json.userId, scenario: 'B', step: 'incentive', movieIds: $json.order.movieIds, orderId: $json.order.id, discountPct: 10, code: 'PONA10', ttlMinutes: 60 }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "36bb66ae-5ada-4d7d-9add-eb0a43864ad9",
+      "name": "Incentive allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4560,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "link-ok-Incentive allowed?",
+              "leftValue": "={{ $json.nudgeId || ($json.body && $json.body.nudgeId) || ($json.data && $json.data.nudgeId) || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dd505e53-8225-47e4-b346-28b499cbaefc",
+      "name": "Write the incentive SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        -260
+      ],
+      "parameters": {
+        "jsCode": "const rescue = $(\"Guard the copy\").first().json;\nconst link = $input.first().json;\nconst message = `Still want ${rescue.title}, ${rescue.firstName}? Code PONA10 \u2014 KES ${link.totalKes} (10% off) for the next hour: ${link.url}`;\nreturn [{ json: {\n  ...link,\n  userId: rescue.userId,\n  orderId: rescue.orderId,\n  phone: rescue.phone,\n  email: rescue.email || '',\n  name: rescue.name || rescue.firstName || '',\n  channelPref: rescue.channelPref || rescue.channel_pref || 'both',\n  subject: `10% off ${rescue.title} \u2014 ends in an hour`,\n  scenario: 'B_incentive',\n  message,\n  filmTitle: rescue.title,\n  title: rescue.title,\n  firstName: rescue.firstName,\n  priceKes: link.totalKes,\n  totalKes: link.totalKes,\n  discountPct: 10,\n  ctaUrl: link.url,\n  url: link.url,\n  ctaLabel: 'Claim 10% off',\n  imageUrl: rescue.imageUrl || null,\n  badge: 'PONA10',\n}}];"
+      }
+    },
+    {
+      "id": "547ce3d0-e647-44c1-836c-adc582af5285",
+      "name": "OpenRouter copy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -100
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1') + '/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'http://localhost:18080' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu Sinema"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.7, max_tokens: 120, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: \"You write one SMS after a failed Paystack/M-Pesa payment on Yakwetu Sinema. Return JSON {\\\"message\\\": \\\"...\\\"}. Start with Pole. Max 110 chars. Use only given facts. No links/emojis. End ready for a resume link.\" },{ role: 'user', content: 'First name: ' + String($json.firstName||'') + '\\n' + 'Film: ' + String($json.title||$json.cartTitle||'') + '\\nReason: ' + String($json.reason||'') + '\\nPrice: KES ' + String($json.totalKes) }] }) }}",
+        "options": {
+          "timeout": 25000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "4c450224-6257-46d7-aaee-70f355dce3b1",
+      "name": "Parse OpenRouter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "let message = '';\ntry {\n  const raw = $input.first().json || {};\n  const content = raw.choices?.[0]?.message?.content || raw.message || '';\n  if (typeof content === 'string' && content.trim().startsWith('{')) {\n    const parsed = JSON.parse(content);\n    message = String(parsed.message || parsed.text || '').trim();\n  } else {\n    message = String(content || '').trim();\n  }\n} catch (e) { message = ''; }\nreturn [{ json: { output: { message }, text: message } }];"
+      }
+    },
+    {
+      "id": "incentive-skip-noop",
+      "name": "Incentive \u00b7 skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7c61e7fe-b4f5-42f9-9845-b4059d85921c",
+      "name": "API already sent (skip n8n notify)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        20
+      ],
+      "parameters": {},
+      "notesInFlow": true,
+      "notes": "Customer SMS/email is sent by paystack-api when the event is ingested. n8n must not send again (prevents 4x duplicates)."
+    }
+  ],
+  "connections": {
+    "Payment failed (RabbitMQ)": {
+      "main": [
+        [
+          {
+            "node": "Paid after all? (Paystack verify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paid after all? (Paystack verify)": {
+      "main": [
+        [
+          {
+            "node": "Settled after all?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settled after all?": {
+      "main": [
+        [
+          {
+            "node": "Paid: no message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Order & viewer (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order & viewer (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Worth a message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worth a message?": {
+      "main": [
+        [
+          {
+            "node": "Send window (07:00\u201321:00)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send window (07:00\u201321:00)": {
+      "main": [
+        [
+          {
+            "node": "Outside the window?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outside the window?": {
+      "main": [
+        [
+          {
+            "node": "Hold until the window opens",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resume link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold until the window opens": {
+      "main": [
+        [
+          {
+            "node": "Resume link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume link (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Link created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link created?": {
+      "main": [
+        [
+          {
+            "node": "Rescue facts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capped or not needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rescue facts": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard the copy": {
+      "main": [
+        [
+          {
+            "node": "API already sent (skip n8n notify)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait 1 second (demo; 2 h live)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 second (demo; 2 h live)": {
+      "main": [
+        [
+          {
+            "node": "Paid yet? (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paid yet? (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Still unpaid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still unpaid?": {
+      "main": [
+        [
+          {
+            "node": "PONA10 link (storefront)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recovered: done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PONA10 link (storefront)": {
+      "main": [
+        [
+          {
+            "node": "Incentive allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incentive allowed?": {
+      "main": [
+        [
+          {
+            "node": "Write the incentive SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Incentive \u00b7 skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the incentive SMS": {
+      "main": [
+        [
+          {
+            "node": "API already sent (skip n8n notify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter copy": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Guard the copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

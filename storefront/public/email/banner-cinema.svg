@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420" role="img" aria-label="Yakwetu Sinema">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2a2118"/>
+      <stop offset="45%" stop-color="#141210"/>
+      <stop offset="100%" stop-color="#3d2a12"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#f5a524" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#f5a524" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1120" height="420" fill="url(#bg)"/>
+  <ellipse cx="860" cy="40" rx="280" ry="160" fill="url(#glow)"/>
+  <!-- Abstract city/skyline suggestion -->
+  <g fill="#0c0a08" opacity="0.55">
+    <rect x="0" y="280" width="1120" height="140"/>
+    <rect x="60" y="210" width="70" height="210"/>
+    <rect x="150" y="160" width="90" height="260"/>
+    <rect x="260" y="230" width="55" height="190"/>
+    <rect x="340" y="140" width="110" height="280"/>
+    <rect x="480" y="200" width="70" height="220"/>
+    <rect x="580" y="120" width="100" height="300"/>
+    <rect x="720" y="190" width="80" height="230"/>
+    <rect x="840" y="150" width="120" height="270"/>
+    <rect x="990" y="220" width="90" height="200"/>
+  </g>
+  <!-- Saffron windows -->
+  <g fill="#f5a524" opacity="0.75">
+    <rect x="170" y="190" width="10" height="14" rx="1"/>
+    <rect x="195" y="220" width="10" height="14" rx="1"/>
+    <rect x="370" y="180" width="10" height="14" rx="1"/>
+    <rect x="400" y="210" width="10" height="14" rx="1"/>
+    <rect x="610" y="160" width="10" height="14" rx="1"/>
+    <rect x="640" y="200" width="10" height="14" rx="1"/>
+    <rect x="870" y="190" width="10" height="14" rx="1"/>
+    <rect x="900" y="230" width="10" height="14" rx="1"/>
+  </g>
+  <text x="64" y="120" font-family="Georgia, 'Times New Roman', serif" font-size="64" font-weight="700" fill="#fff8ec">Yakwetu Sinema</text>
+  <text x="64" y="168" font-family="Arial, Helvetica, sans-serif" font-size="22" letter-spacing="4" fill="#f5a524">AFRICAN FILMS · PAY PER TITLE</text>
+</svg>

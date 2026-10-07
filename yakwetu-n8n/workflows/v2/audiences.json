@@ -1,0 +1,54 @@
+{
+  "name": "YKW \u00b7 Audiences \u2014 taste \u2192 PostHog profiles (nightly)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "1ed8e3df-dab8-4a00-b9f5-3e486c1cfcf9",
+      "name": "Note 3340ae",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -340
+      ],
+      "parameters": {
+        "content": "## Audiences (optional)\nDisabled against old sinema-recs/PostHog hosts. Use `/admin` CRM + Postgres instead, or re-point to YAKWETU_API_URL when needed.",
+        "width": 460,
+        "height": 300,
+        "color": 4
+      }
+    },
+    {
+      "id": "161fb9a4-7c5e-4fec-a648-9a3b0a93ef98",
+      "name": "Every night at 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every night at 02:00": {
+      "main": [
+        []
+      ]
+    }
+  }
+}

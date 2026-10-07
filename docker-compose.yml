@@ -1,0 +1,222 @@
+# Yakwetu Sinema — local / generic Docker Compose
+# Copy env vars from your host or a local .env (gitignored). No cloud-host
+# assumptions; use any reverse proxy you like in front of the published ports.
+#
+# Quick start:
+#   docker compose up -d --build
+#
+# Host ports (chosen to avoid common collisions):
+#   Storefront  http://localhost:18080
+#   API         http://localhost:13001
+#   n8n         http://localhost:15678
+#   Postgres    localhost:15433
+#   RabbitMQ    amqp://localhost:25672  ·  mgmt http://localhost:25673
+
+services:
+  sinema-web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.storefront
+    image: sinema-web
+    container_name: sinema-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-18080}:80"
+    volumes:
+      - ./deploy/nginx-storefront.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - sinema-net
+    depends_on:
+      sinema-api:
+        condition: service_healthy
+
+  sinema-api:
+    build:
+      context: ./services/paystack-api
+      dockerfile: Dockerfile
+    image: sinema-api
+    container_name: sinema-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-13001}:3001"
+    environment:
+      PORT: 3001
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET:-}
+      PAYSTACK_CURRENCY: ${PAYSTACK_CURRENCY:-KES}
+      N8N_EVENT_WEBHOOK: ${N8N_EVENT_WEBHOOK:-http://sinema-flows:5678/webhook/yakwetu-event}
+      AT_API_KEY: ${AT_API_KEY:-}
+      AT_USERNAME: ${AT_USERNAME:-}
+      AT_SENDER_ID: ${AT_SENDER_ID:-}
+      AT_API_URL: ${AT_API_URL:-https://api.africastalking.com/version1/messaging}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-change-me}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-${ADMIN_TOKEN:-change-me}}
+      ADMIN_PHONE: ${ADMIN_PHONE:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-Yakwetu Sinema <noreply@example.com>}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://sinema:${RABBITMQ_PASSWORD:-change-me}@sinema-broker:5672/sinema}
+      RABBITMQ_MGMT_URL: ${RABBITMQ_MGMT_URL:-http://sinema-broker:15672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-sinema}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-sinema}
+      ABANDON_DELAY_MIN: ${ABANDON_DELAY_MIN:-2}
+      STOREFRONT_URL: ${STOREFRONT_URL:-http://localhost:18080}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      OMDB_API_KEY: ${OMDB_API_KEY:-}
+      POSTGRES_HOST: sinema-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-sinema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-sinema}
+    networks:
+      - sinema-net
+    depends_on:
+      sinema-db:
+        condition: service_healthy
+      sinema-broker:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  sinema-flows:
+    image: n8nio/n8n:latest
+    container_name: sinema-flows
+    restart: unless-stopped
+    ports:
+      - "${FLOWS_PORT:-15678}:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: sinema-db
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-sinema}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-sinema}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-dev-only-change-me}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:15678/}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:15678/}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:15678/}
+      N8N_PROXY_HOPS: ${N8N_PROXY_HOPS:-0}
+      N8N_PUSH_BACKEND: ${N8N_PUSH_BACKEND:-websocket}
+      GENERIC_TIMEZONE: Africa/Nairobi
+      TZ: Africa/Nairobi
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      YAKWETU_API_URL: ${YAKWETU_API_URL:-http://sinema-api:3001}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-me}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-change-me}
+      STOREFRONT_URL: ${STOREFRONT_URL:-http://localhost:18080}
+      AT_API_KEY: ${AT_API_KEY:-}
+      AT_USERNAME: ${AT_USERNAME:-}
+      AT_SENDER_ID: ${AT_SENDER_ID:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-Yakwetu Sinema <noreply@example.com>}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://sinema:${RABBITMQ_PASSWORD:-change-me}@sinema-broker:5672/sinema}
+      RABBITMQ_MGMT_URL: ${RABBITMQ_MGMT_URL:-http://sinema-broker:15672}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-sinema}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+    volumes:
+      - sinema_n8n_data:/home/node/.n8n
+    networks:
+      - sinema-net
+    depends_on:
+      sinema-db:
+        condition: service_healthy
+      sinema-broker:
+        condition: service_healthy
+
+  sinema-broker:
+    image: rabbitmq:3.13-management-alpine
+    container_name: sinema-broker
+    hostname: sinema-broker
+    restart: unless-stopped
+    ports:
+      - "${BROKER_PORT:-25672}:5672"
+      - "${BROKER_MGMT_PORT:-25673}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-sinema}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-me}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-sinema}
+    volumes:
+      - sinema_rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - sinema-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  sinema-db:
+    image: postgres:16-alpine
+    container_name: sinema-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sinema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-sinema}
+    ports:
+      - "${DB_PORT:-15433}:5432"
+    volumes:
+      - sinema_db_data:/var/lib/postgresql/data
+      - ./yakwetu-n8n/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./yakwetu-n8n/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - sinema-net
+
+  sinema-seed:
+    image: postgres:16-alpine
+    container_name: sinema-seed
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_USER: ${POSTGRES_USER:-sinema}
+      POSTGRES_DB: ${POSTGRES_DB:-sinema}
+    volumes:
+      - ./yakwetu-n8n/migrate-v2.sql:/migrate-v2.sql:ro
+      - ./yakwetu-n8n/seed-demo.sql:/seed-demo.sql:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "Applying schema migrations…"
+        psql -h sinema-db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /migrate-v2.sql
+        echo "Applying demo seed…"
+        psql -h sinema-db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /seed-demo.sql
+        echo "Seed OK"
+    networks:
+      - sinema-net
+    depends_on:
+      sinema-db:
+        condition: service_healthy
+
+volumes:
+  sinema_db_data:
+  sinema_n8n_data:
+  sinema_rabbitmq_data:
+
+networks:
+  sinema-net:
+    driver: bridge

@@ -1,0 +1,424 @@
+{
+  "name": "YKW 02 \u2014 Browse & Cart Abandonment Recovery",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "be582ff7-8ec1-4cee-a9de-854134faf399",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "yakwetu-abandon-scan",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a11a-ykw02-webhook-scan",
+      "name": "Demo / Manual Scan",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        520
+      ],
+      "webhookId": "yakwetu-abandon-scan"
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.body !== undefined ? $json.body : $json;\nif (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (e) { raw = {}; } }\nconst q = $json.query || {};\nconst session_id = (raw && raw.session_id) || q.session_id || $json.session_id || null;\nif (!session_id) {\n  throw new Error('Demo abandon-scan needs session_id in JSON body or ?session_id=');\n}\nreturn [{ json: { session_id: String(session_id), force: true, source: (raw && raw.source) || 'demo-lab' } }];"
+      },
+      "id": "a11a-ykw02-prepare-demo",
+      "name": "Prepare Demo Scan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE sessions\nSET last_activity = NOW() - INTERVAL '50 minutes',\n    recovered = false,\n    state = 'checkout',\n    nudge_count = 0,\n    last_nudge_at = NULL\nWHERE session_id = $1;\n\nSELECT s.session_id, s.user_id, s.state, s.last_movie_id, s.last_movie_title,\n       s.last_genre, s.last_price, s.nudge_count, u.name, u.phone, u.email, u.channel_pref\nFROM sessions s\nJOIN users u ON u.user_id = s.user_id\nWHERE s.session_id = $1\n  AND s.recovered = false;",
+        "options": {
+          "queryReplacement": "={{ [$json.session_id] }}"
+        }
+      },
+      "id": "a11a-ykw02-age-find-demo",
+      "name": "Age + Find Demo Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        620,
+        520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.session_id, s.user_id, s.state, s.last_movie_id, s.last_movie_title,\n       s.last_genre, s.last_price, s.nudge_count, u.name, u.phone, u.email, u.channel_pref\nFROM sessions s JOIN users u ON u.user_id = s.user_id\nWHERE s.state IN ('browsing','checkout','failed')\n  AND s.recovered = false\n  AND s.last_activity < NOW() - INTERVAL '45 minutes'\n  AND s.last_activity > NOW() - INTERVAL '72 hours'\n  AND s.nudge_count < 2\n  AND (s.last_nudge_at IS NULL OR s.last_nudge_at < NOW() - INTERVAL '20 hours')\nLIMIT 25;",
+        "options": {}
+      },
+      "id": "796ecdec-51f3-433b-aa68-85f333d7be3f",
+      "name": "Find Abandoned Sessions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let force = false;\ntry { force = Boolean($('Demo / Manual Scan').isExecuted); } catch (e) { force = false; }\nif (force) return $input.all();\nconst now = new Date();\nconst eat = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));\nconst h = eat.getHours();\nif (h >= 21 || h < 8) return [];\nreturn $input.all();"
+      },
+      "id": "2c484a2a-9693-4543-aabb-2326f91c5bd0",
+      "name": "Quiet Hours Gate (EAT)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "cd9ac2fa-e448-4267-b3bc-01bdb4c5ddcd",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT movie_title, genre, price_kes, ts\nFROM events\nWHERE user_id = $1 AND event_type = 'browse' AND movie_title IS NOT NULL\nORDER BY ts DESC LIMIT 5;",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id] }}"
+        }
+      },
+      "id": "f1847ddc-4732-49ce-b5e5-f1eab498f26f",
+      "name": "Get Browse History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1120,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/$/, '') + '/chat/completions' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.STOREFRONT_URL || 'http://localhost:18080' }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "Yakwetu"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'), temperature: 0.8, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"You are the retention copywriter for Yakwetu, a Kenyan African-movie streaming platform. Write short, warm, high-converting re-engagement messages. Tone: friendly Nairobi energy, light Sheng allowed but keep it respectful. Max 300 characters. Always include one specific movie hook. Never sound desperate. Return JSON only: {\\\"message\\\": \\\"...\\\", \\\"recommended_title\\\": \\\"...\\\"}\" }, { role: 'user', content: ('User ' + ($('Loop Over Items').item.json.name || 'this viewer') + ' browsed these African movies but didn\\'t buy: ' + ($json.browse_history || $('Loop Over Items').item.json.last_movie_title || '') + '. Last title: ' + ($('Loop Over Items').item.json.last_movie_title || '') + ' (' + ($('Loop Over Items').item.json.last_genre || '') + ', KES ' + ($('Loop Over Items').item.json.last_price || '') + '). Write a short SMS nudge that makes them want to finish the purchase tonight.') } ] }) }}",
+        "options": {}
+      },
+      "id": "d5e1cefc-1764-4a56-ae79-092e22064492",
+      "name": "AI: Personalize Nudge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $('Loop Over Items').item.json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nlet ai;\ntry { ai = JSON.parse($json.choices?.[0]?.message?.content || $json.message?.content || $json.text || '{}'); }\ncatch(e) { ai = { message: `Hi ${s.name || 'there'}! ${s.last_movie_title} is still waiting for you on Yakwetu \ud83c\udfac`, recommended_title: s.last_movie_title }; }\n\n// One-click resume link: lands on checkout with phone prefilled + STK auto-push\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:18080').replace(/\\/$/, '');\nconst mid = encodeURIComponent(s.last_movie_id || 'nairobi-half-life');\nconst link = `${storefront}/checkout/${mid}?resume=${s.session_id}`;\n\nreturn [{ json: { ...s, ai_message: ai.message, recommended_title: ai.recommended_title, resume_link: link,\n  full_message: `${ai.message}\\n\\n\ud83c\udfac Finish watching: ${link}` } }];"
+      },
+      "id": "22dd2c9c-8f4c-467f-90de-3432127a14ac",
+      "name": "Build Message + Deep Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $env.AT_USERNAME }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $('Build Message + Deep Link').item.json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $('Build Message + Deep Link').item.json.full_message }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "523f3bb3-4da7-4fb2-9a5f-1a3bdf00f5c1",
+      "name": "Send SMS (Africa's Talking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'browse_abandon',$3,$4,NOW());\nUPDATE sessions SET nudge_count = nudge_count + 1, last_nudge_at = NOW() WHERE session_id = $2;",
+        "options": {
+          "queryReplacement": "={{ [$('Build Message + Deep Link').item.json.user_id, $('Build Message + Deep Link').item.json.session_id, 'sms', $('Build Message + Deep Link').item.json.full_message] }}"
+        }
+      },
+      "id": "51bcaf7c-9b3e-4a8b-b55c-0033f46816f0",
+      "name": "Log Nudge",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2220,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Find Abandoned Sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Abandoned Sessions": {
+      "main": [
+        [
+          {
+            "node": "Quiet Hours Gate (EAT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quiet Hours Gate (EAT)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Get Browse History",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get Browse History": {
+      "main": [
+        [
+          {
+            "node": "AI: Personalize Nudge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Personalize Nudge": {
+      "main": [
+        [
+          {
+            "node": "Build Message + Deep Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Message + Deep Link": {
+      "main": [
+        [
+          {
+            "node": "Send SMS (Africa's Talking)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Nudge": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Africa's Talking)": {
+      "main": [
+        [
+          {
+            "node": "Log Nudge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo / Manual Scan": {
+      "main": [
+        [
+          {
+            "node": "Prepare Demo Scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Demo Scan": {
+      "main": [
+        [
+          {
+            "node": "Age + Find Demo Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Age + Find Demo Session": {
+      "main": [
+        [
+          {
+            "node": "Quiet Hours Gate (EAT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

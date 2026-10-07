@@ -1,0 +1,689 @@
+{
+  "name": "YKW 01 \u2014 Event Intake & State Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "yakwetu-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "797db09c-45d9-488a-97b1-c8b036f1d172",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "yakwetu-event"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body || $json;\nconst required = ['event_type', 'user_id'];\nfor (const r of required) {\n  if (!b[r]) throw new Error(`Missing required field: ${r}`);\n}\nconst VALID = ['signup','browse','checkout_start','payment_failed','payment_success','watch_complete','demo_abandon'];\nif (!VALID.includes(b.event_type)) throw new Error('Unknown event_type: ' + b.event_type);\n\nreturn [{ json: {\n  event_type: b.event_type,\n  user_id: String(b.user_id),\n  name: b.name || '',\n  phone: String(b.phone || '').replace(/\\s/g,''),\n  email: b.email || '',\n  session_id: b.session_id || ('sess_' + Date.now()),\n  movie_id: b.movie_id || null,\n  movie_title: b.movie_title || null,\n  genre: b.genre || null,\n  price_kes: b.price_kes || null,\n  failure_reason: b.failure_reason || null,\n  channel_pref: b.channel_pref || 'sms',\n  skip_sms: Boolean(b.skip_sms),\n  ts: b.ts || new Date().toISOString()\n}}];"
+      },
+      "id": "d4773697-1b41-48ba-ae06-3e68587104b3",
+      "name": "Normalize & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO users (user_id, name, phone, email, channel_pref, last_seen)\nVALUES ($1,$2,$3,$4,$5, NOW())\nON CONFLICT (user_id) DO UPDATE SET\n  name = COALESCE(NULLIF(EXCLUDED.name,''), users.name),\n  phone = COALESCE(NULLIF(EXCLUDED.phone,''), users.phone),\n  email = COALESCE(NULLIF(EXCLUDED.email,''), users.email),\n  channel_pref = COALESCE(EXCLUDED.channel_pref, users.channel_pref),\n  last_seen = NOW()\nRETURNING user_id;",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id, $json.name, $json.phone, $json.email, $json.channel_pref] }}"
+        }
+      },
+      "id": "5fd82043-2624-4d40-8354-b124dcc21483",
+      "name": "Upsert User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: { ...ev } }];"
+      },
+      "id": "a11a0001-restore-after-upsert",
+      "name": "Restore Event After Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO events (user_id, session_id, event_type, movie_id, movie_title, genre, price_kes, failure_reason, ts)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz);\nINSERT INTO sessions (session_id, user_id, state, last_activity, last_movie_id, last_movie_title, last_genre, last_price, recovered, nudge_count, last_nudge_at)\nVALUES ($2,$1,\n  CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE 'browsing' END,\n  CASE WHEN $3 = 'demo_abandon' THEN NOW() - INTERVAL '50 minutes' ELSE NOW() END,\n  $4,$5,$6,$7,\n  CASE WHEN $3 = 'payment_success' THEN true WHEN $3 = 'demo_abandon' THEN false ELSE false END,\n  CASE WHEN $3 = 'demo_abandon' THEN 0 ELSE 0 END,\n  NULL)\nON CONFLICT (session_id) DO UPDATE SET\n  state = CASE $3 WHEN 'checkout_start' THEN 'checkout' WHEN 'demo_abandon' THEN 'checkout' WHEN 'payment_success' THEN 'purchased' WHEN 'payment_failed' THEN 'failed' ELSE sessions.state END,\n  last_activity = CASE WHEN $3 = 'demo_abandon' THEN NOW() - INTERVAL '50 minutes' ELSE NOW() END,\n  last_movie_id = COALESCE($4, sessions.last_movie_id),\n  last_movie_title = COALESCE($5, sessions.last_movie_title),\n  last_genre = COALESCE($6, sessions.last_genre),\n  last_price = COALESCE($7, sessions.last_price),\n  recovered = CASE WHEN $3='payment_success' THEN true WHEN $3='demo_abandon' THEN false ELSE sessions.recovered END,\n  nudge_count = CASE WHEN $3='demo_abandon' THEN 0 ELSE sessions.nudge_count END,\n  last_nudge_at = CASE WHEN $3='demo_abandon' THEN NULL ELSE sessions.last_nudge_at END\nRETURNING session_id;",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id, $json.session_id, $json.event_type, $json.movie_id, $json.movie_title, $json.genre, $json.price_kes, $json.failure_reason, $json.ts] }}"
+        }
+      },
+      "id": "db3d9314-8033-4e6c-99ae-b1d935b2f498",
+      "name": "Log Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: { ...ev } }];"
+      },
+      "id": "a11a0002-restore-after-log",
+      "name": "Restore Event After Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "payment_success",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "payment_success"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "r-demo-abandon",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "demo_abandon",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "demo_abandon"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "r-pay-fail",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "payment_failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "payment_failed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "r-watch",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "watch_complete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "watch_complete"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "d8037821-cf36-46e0-bbe7-6479597d3377",
+      "name": "Route by Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: {\n  status: 'ok',\n  event: 'demo_abandon',\n  session_id: ev.session_id,\n  user_id: ev.user_id,\n  hint: 'Session stored as already idle 50 min (no wait)'\n}}];"
+      },
+      "id": "a11a0021-build-demo-abandon-ok",
+      "name": "Build Demo Abandon OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE nudges SET converted = true, converted_at = NOW()\nWHERE user_id = $1 AND converted = false\n  AND sent_at > NOW() - INTERVAL '72 hours'\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$json.user_id] }}"
+        }
+      },
+      "id": "ecb3b97b-1361-45fa-91d1-369190218636",
+      "name": "Check Recovery Attribution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1580,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "skip1",
+              "leftValue": "={{ $('Normalize & Validate').item.json.skip_sms }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a11a-skip-payment-sms",
+      "name": "Skip Payment SMS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nreturn [{ json: {\n  status: 'ok',\n  event: ev.event_type,\n  session_id: ev.session_id,\n  user_id: ev.user_id\n}}];"
+      },
+      "id": "a11a0003-build-ok-response",
+      "name": "Build OK Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "2132f950-5770-4812-8ac0-4226ed2f5a7f",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Normalize & Validate').first().json;\nconst atUsername = String($env.AT_USERNAME || '').trim();\nconst atApiKey = String($env.AT_API_KEY || '').trim();\nconst atSenderId = String($env.AT_SENDER_ID || '').trim();\nif (!atUsername || !atApiKey || !atSenderId) {\n  throw new Error(\"Africa's Talking SMS requires AT_USERNAME, AT_API_KEY, and AT_SENDER_ID on the n8n container\");\n}\nconst storefront = (typeof $env !== 'undefined' && $env.STOREFRONT_URL ? $env.STOREFRONT_URL : 'http://localhost:18080').replace(/\\/$/, '');\nconst title = ev.movie_title || 'your movie';\nconst price = ev.price_kes != null ? `KES ${ev.price_kes}` : '';\nconst watch = `${storefront}/watch/${encodeURIComponent(ev.movie_id || 'nairobi-half-life')}`;\nconst name = (ev.name || 'there').split(' ')[0];\nconst full_message = `Hi ${name}! Payment received for ${title}${price ? ' (' + price + ')' : ''}. You're all set \u2014 watch now: ${watch}`;\nreturn [{ json: { ...ev, watch_link: watch, full_message } }];"
+      },
+      "id": "a11a0010-build-payment-sms",
+      "name": "Build Payment SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AT_API_URL || 'https://api.africastalking.com/version1/messaging' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.AT_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $env.AT_USERNAME }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.full_message }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $env.AT_SENDER_ID }}"
+            },
+            {
+              "name": "bulkSMSMode",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a11a0011-send-payment-sms",
+      "name": "Send Payment SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nudges (user_id, session_id, scenario, channel, message, sent_at)\nVALUES ($1,$2,'payment_success','sms',$3,NOW())\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Build Payment SMS').item.json.user_id, $('Build Payment SMS').item.json.session_id, $('Build Payment SMS').item.json.full_message] }}"
+        }
+      },
+      "id": "a11a0012-log-payment-sms",
+      "name": "Log Payment SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1980,
+        80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Yakwetu Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://127.0.0.1:5678/webhook/yakwetu-payment-rescue",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Normalize & Validate').first().json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a11a-call-03",
+      "name": "Call Payment Rescue (YKW-03)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        520
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://127.0.0.1:5678/webhook/yakwetu-watch-upsell",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Normalize & Validate').first().json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a11a-call-04",
+      "name": "Call Watch Upsell (YKW-04)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        640
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Validate": {
+      "main": [
+        [
+          {
+            "node": "Upsert User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert User": {
+      "main": [
+        [
+          {
+            "node": "Restore Event After Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Event After Upsert": {
+      "main": [
+        [
+          {
+            "node": "Log Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Event": {
+      "main": [
+        [
+          {
+            "node": "Restore Event After Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Event After Log": {
+      "main": [
+        [
+          {
+            "node": "Route by Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event": {
+      "main": [
+        [
+          {
+            "node": "Check Recovery Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Demo Abandon OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Payment Rescue (YKW-03)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Watch Upsell (YKW-04)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Demo Abandon OK": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Recovery Attribution": {
+      "main": [
+        [
+          {
+            "node": "Skip Payment SMS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OK Response": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Payment SMS": {
+      "main": [
+        [
+          {
+            "node": "Send Payment SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Payment SMS": {
+      "main": [
+        [
+          {
+            "node": "Log Payment SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Payment SMS": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Payment Rescue (YKW-03)": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Watch Upsell (YKW-04)": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Payment SMS?": {
+      "main": [
+        [
+          {
+            "node": "Build OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Payment SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

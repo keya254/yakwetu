@@ -1,0 +1,157 @@
+{
+  "name": "YKW · Dual-channel notify helper (Resend + AT)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Dual-channel notify helper\nCalled by **Execute Workflow** with `{ userId, phone, email, message, subject?, scenario?, channelPref?, ctaUrl?, … }`.\n\nSends via paystack-api `POST /api/internal/notify` (email preferred, SMS fallback; pass `channels: ['sms','email']` to force both).\n\nYKW 02/03/04/journeys already notify inline — this helper is optional for shared calls.\n\nEnv on **n8n**: `YAKWETU_API_URL`, `INTERNAL_API_KEY` (or `ADMIN_TOKEN`).\nResend/AT live on **paystack-api**.",
+        "height": 340,
+        "width": 480
+      },
+      "id": "note-dual",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-280, 40]
+    },
+    {
+      "parameters": {},
+      "id": "start",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const i = $input.first().json || {};\nconst phone = String(i.phone || i.properties?.phone || '').trim();\nconst email = String(i.email || i.properties?.email || '').trim().toLowerCase();\nconst message = String(i.message || i.properties?.message || '').trim();\nconst name = i.name || i.firstName || i.properties?.name || '';\nconst subject = i.subject || 'Yakwetu Sinema';\nconst channelPref = i.channelPref || i.channel_pref || (email ? 'email' : phone ? 'sms' : 'both');\nconst channels = Array.isArray(i.channels) ? i.channels : null;\n\nif (!message) {\n  return [{ json: { ...i, skipped: true, reason: 'no message', phone, email } }];\n}\nif (!phone && !email) {\n  return [{ json: { ...i, skipped: true, reason: 'no contact', phone, email } }];\n}\n\nreturn [{\n  json: {\n    ...i,\n    userId: i.userId || i.user_id || null,\n    phone,\n    email,\n    name,\n    message,\n    subject,\n    channelPref,\n    channel_pref: channelPref,\n    channels,\n    scenario: i.scenario || 'n8n_notify',\n    sessionId: i.sessionId || i.session_id || null,\n    ctaUrl: i.ctaUrl || i.url || null,\n    ctaLabel: i.ctaLabel || null,\n    imageUrl: i.imageUrl || i.poster || null,\n    filmTitle: i.filmTitle || i.title || i.cartTitle || i.boughtTitle || null,\n    bundleTitle: i.bundleTitle || (Array.isArray(i.pickTitles) ? i.pickTitles.join(' + ') : i.pickTitle) || null,\n    genre: i.genre || null,\n    priceKes: i.priceKes || i.totalKes || null,\n    discountPct: i.discountPct || null,\n    watchedTitle: i.watchedTitle || null,\n    headline: i.headline || null,\n    badge: i.badge || null,\n    skipped: false,\n  },\n}];\n"
+      },
+      "id": "normalize",
+      "name": "Normalize input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ !$json.skipped && Boolean($json.message) && Boolean($json.phone || $json.email) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ready",
+      "name": "Ready to send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [480, 200]
+    },
+    {
+      "parameters": {},
+      "id": "skip",
+      "name": "No contact — skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [740, 360]
+    },
+    {
+      "id": "notify-api",
+      "name": "Notify via API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 120],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.YAKWETU_API_URL || 'http://sinema-api:3001') + '/api/internal/notify' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{ $env.INTERNAL_API_KEY || $env.ADMIN_TOKEN || 'change-me' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ userId: $json.userId, phone: $json.phone || '', email: $json.email || '', name: $json.name || '', channelPref: $json.channelPref || 'both', subject: $json.subject || 'Yakwetu Sinema', message: $json.message, scenario: $json.scenario || 'n8n_notify', sessionId: $json.sessionId || null, ctaUrl: $json.ctaUrl || $json.url || null, ctaLabel: $json.ctaLabel || null, imageUrl: $json.imageUrl || null, filmTitle: $json.filmTitle || null, bundleTitle: $json.bundleTitle || null, genre: $json.genre || null, priceKes: $json.priceKes || null, discountPct: $json.discountPct || null, watchedTitle: $json.watchedTitle || null, headline: $json.headline || null, badge: $json.badge || null }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Ready to send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready to send?": {
+      "main": [
+        [
+          {
+            "node": "Notify via API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No contact — skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Nairobi"
+  }
+}
